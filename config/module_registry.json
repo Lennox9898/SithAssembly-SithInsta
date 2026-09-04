@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "description": "Explicit local module registry. Only listed src.* modules may be loaded at startup.",
+  "modules": [
+    {"key": "collector", "import_path": "src.collector", "enabled": true},
+    {"key": "profile_resolver", "import_path": "src.profile_resolver", "enabled": true},
+    {"key": "identity_resolver", "import_path": "src.identity_resolver", "enabled": true},
+    {"key": "relationship_engine", "import_path": "src.relationship_engine", "enabled": true},
+    {"key": "timeline_engine", "import_path": "src.timeline_engine", "enabled": true},
+    {"key": "graph_viewer", "import_path": "src.graph_viewer", "enabled": true},
+    {"key": "case_manager", "import_path": "src.case_manager", "enabled": true},
+    {"key": "evidence_integrity", "import_path": "src.evidence_integrity", "enabled": true},
+    {"key": "case_importer", "import_path": "src.case_importer", "enabled": true},
+    {"key": "report_generator", "import_path": "src.report_generator", "enabled": true},
+    {"key": "command_engine", "import_path": "src.command_engine", "enabled": true},
+    {"key": "agent_controller", "import_path": "src.agent_controller", "enabled": true},
+    {"key": "agent_coordination", "import_path": "src.agent_coordination", "enabled": true},
+    {"key": "clawdbot_adapter", "import_path": "src.clawdbot_adapter", "enabled": true},
+    {"key": "local_llm", "import_path": "src.local_llm", "enabled": true},
+    {"key": "runtime_doctor", "import_path": "src.runtime_doctor", "enabled": true},
+    {"key": "deployment_preflight", "import_path": "src.deployment_preflight", "enabled": true},
+    {"key": "comment_anomaly", "import_path": "src.comment_anomaly", "enabled": true},
+    {"key": "ocr_engine", "import_path": "src.ocr_engine", "enabled": true},
+    {"key": "evidence_vault", "import_path": "src.evidence_vault", "enabled": true}
+  ]
+}

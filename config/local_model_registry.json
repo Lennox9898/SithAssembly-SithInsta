@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "notes": "Human-editable local model registry. Providers are disabled until their local runtime is started and tested.",
+  "providers": [
+    {
+      "id": "ollama-local",
+      "runtime": "Ollama",
+      "enabled": false,
+      "protocol": "ollama_chat",
+      "base_url": "http://127.0.0.1:11434",
+      "timeout_seconds": 120,
+      "max_output_tokens": 2048
+    },
+    {
+      "id": "llama-cpp-local",
+      "runtime": "llama.cpp",
+      "enabled": false,
+      "protocol": "openai_chat_completions",
+      "base_url": "http://127.0.0.1:8081/v1",
+      "timeout_seconds": 120,
+      "max_output_tokens": 2048
+    },
+    {
+      "id": "vllm-local",
+      "runtime": "vLLM",
+      "enabled": false,
+      "protocol": "openai_chat_completions",
+      "base_url": "http://127.0.0.1:8000/v1",
+      "timeout_seconds": 120,
+      "max_output_tokens": 2048
+    }
+  ],
+  "model_profiles": [
+    {
+      "id": "qwen3-8b",
+      "repository": "Qwen/Qwen3-8B",
+      "kind": "chat",
+      "roles": ["evidence_draft", "model_assessment", "agent_reasoning"],
+      "response_contract": "qwen_evidence_v1",
+      "runtime_models": {
+        "ollama-local": "qwen3:8b",
+        "llama-cpp-local": "qwen3-8b",
+        "vllm-local": "Qwen/Qwen3-8B"
+      }
+    }
+  ]
+}

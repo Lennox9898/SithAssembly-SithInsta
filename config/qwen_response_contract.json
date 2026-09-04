@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "model_id": "Qwen/Qwen3-8B",
+  "purpose": "evidence_bound_draft_and_model_assessment",
+  "input": {
+    "allowed_context": "retrieved evidence excerpts with stable evidence IDs",
+    "required_fields": ["case_id", "evidence"],
+    "evidence_item_fields": ["evidence_id", "excerpt", "source_url", "captured_at"]
+  },
+  "output_order": [
+    "evidence_facts",
+    "model_assessment",
+    "uncertainties",
+    "review_questions"
+  ],
+  "evidence_facts": {
+    "description": "Readable factual statements tied to one or more supplied evidence IDs.",
+    "required_fields": ["statement", "evidence_ids"],
+    "validation": "Every evidence_id must exist in the input. Statements without evidence IDs are rejected."
+  },
+  "model_assessment": {
+    "label": "Qwen model assessment - probabilistic interpretation, not a verified fact",
+    "required_fields": ["readable_text", "confidence", "basis_evidence_ids"],
+    "confidence_range": [0, 1],
+    "display": "Show directly below evidence facts in plain language with the confidence value and linked basis evidence."
+  },
+  "uncertainties": {
+    "description": "Missing context, alternative explanations or limits of the available evidence.",
+    "display": "Always visible below the model assessment."
+  },
+  "storage": {
+    "evidence_facts": "reviewable draft linked to evidence",
+    "model_assessment": "derived model output, never stored as a case fact without analyst review"
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "coordination_mode": "local_deterministic",
+  "automation": {
+    "run_mode": "operator_configurable",
+    "external_adapters": "explicit_adapter_required",
+    "agent_reports": "append_only"
+  },
+  "human_approval_required_for": [
+    "review.decision",
+    "export.request",
+    "vault.create",
+    "model.download"
+  ],
+  "agents": [
+    {
+      "id": "vektorzero-collector",
+      "codename": "SithAssembly//VektorZero",
+      "module": "collector",
+      "enabled": true,
+      "subscribes_to": ["observation.received"],
+      "publishes": ["observation.normalized"],
+      "permissions": ["normalize_local_input"]
+    },
+    {
+      "id": "signalforge-analysis",
+      "codename": "SithAssembly//SignalForge",
+      "module": "comment_anomaly",
+      "enabled": true,
+      "subscribes_to": ["observation.normalized"],
+      "publishes": ["analysis.review_candidate"],
+      "permissions": ["score_local_comment_features"]
+    },
+    {
+      "id": "glyphwatch-ocr",
+      "codename": "SithAssembly//GlyphWatch",
+      "module": "ocr_engine",
+      "enabled": true,
+      "subscribes_to": ["evidence.ocr_requested"],
+      "publishes": ["evidence.ocr_completed"],
+      "permissions": ["read_explicit_local_image"]
+    },
+    {
+      "id": "spectrenet-relationships",
+      "codename": "SithAssembly//SpectreNet",
+      "module": "relationship_engine",
+      "enabled": true,
+      "subscribes_to": ["observation.normalized", "analysis.review_candidate"],
+      "publishes": ["relationship.candidate"],
+      "permissions": ["derive_evidence_bound_links"]
+    },
+    {
+      "id": "caseforge-review",
+      "codename": "SithAssembly//CaseForge",
+      "module": "case_manager",
+      "enabled": true,
+      "subscribes_to": ["relationship.candidate", "analysis.review_candidate"],
+      "publishes": ["review.required"],
+      "permissions": ["create_review_queue_items"]
+    },
+    {
+      "id": "blackarchive-reporting",
+      "codename": "SithAssembly//BlackArchive",
+      "module": "report_generator",
+      "enabled": true,
+      "subscribes_to": ["export.approved"],
+      "publishes": ["export.completed"],
+      "permissions": ["render_local_case_export"]
+    }
+  ]
+}

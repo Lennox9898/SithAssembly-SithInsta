@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "adapter": "instagram_read_adapter",
+  "enabled": false,
+  "connector_plan": {
+    "status": "planned",
+    "startup": "operator_configurable",
+    "work_queue": "persistent_jobs",
+    "quota_mode": "provider_configured",
+    "failure_strategy": "backoff_and_report",
+    "report_topic": "collection.run_reported"
+  },
+  "notes": "Human-editable local account inventory. This file is ignored by Git. Store only secret references, never a plaintext password.",
+  "accounts": [
+    {
+      "id": "ig_monitor_01",
+      "username": "replace_with_account_name",
+      "secret_ref": "env:INSTAWATCH_IG_MONITOR_01_PASSWORD",
+      "purpose": "replace_with_operator_defined_purpose",
+      "enabled": false,
+      "execution_profile": "operator_configurable",
+      "requested_capabilities": ["read_only"],
+      "agent_topics": ["collection.requested"],
+      "operator_notes": "Add scope, schedule and adapter details here."
+    }
+  ]
+}

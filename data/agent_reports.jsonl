@@ -1,0 +1,1 @@
+{"timestamp":"2026-09-04T00:49:13.865831+00:00","agent_id":"vektorzero-collector","case_id":null,"state":"info","summary":"Runtime handshake verified.","output_refs":["runtime:local"],"connections":[{"name":"Conclave","kind":"local_module","state":"available","detail":"Registry loaded."}]}

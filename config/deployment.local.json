@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "environment": "prepared_local",
+  "network": {
+    "public_bind": false,
+    "operator_access": "loopback_or_private_vpn",
+    "tls": "reverse_proxy_required_before_public_exposure"
+  },
+  "services": {
+    "api": {"role": "casework_api", "state": "prepared", "port": 8080},
+    "worker": {"role": "analysis_jobs", "state": "prepared", "concurrency": 1},
+    "database": {"engine": "PostgreSQL", "state": "migration_not_started", "vector_extension": "pgvector"},
+    "object_storage": {"protocol": "s3_compatible", "state": "migration_not_started"},
+    "event_bus": {"engine": "NATS JetStream", "state": "prepared", "subjects": ["observation.received", "analysis.review_candidate", "relationship.candidate", "review.required", "export.requested"]},
+    "model_serving": {"state": "opt_in", "allowed_runtimes": ["Ollama", "llama.cpp", "vLLM"]}
+  },
+  "secret_references": {
+    "database_password": "env:SITH_POSTGRES_PASSWORD",
+    "object_storage_access_key": "env:SITH_STORAGE_ACCESS_KEY",
+    "object_storage_secret_key": "env:SITH_STORAGE_SECRET_KEY",
+    "nats_credentials": "env:SITH_NATS_CREDS"
+  },
+  "activation_gates": [
+    "Review and pin every container image by immutable digest.",
+    "Create encrypted backups and test one restore before migrating evidence.",
+    "Migrate SQLite data to PostgreSQL with reconciliation reports.",
+    "Place API behind authenticated TLS reverse proxy or private VPN.",
+    "Create narrow worker, storage, and database credentials.",
+    "Keep all platform connectors disabled unless an explicit compliant adapter is approved."
+  ]
+}
