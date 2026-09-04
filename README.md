@@ -2,24 +2,17 @@
 
 `Signal Desk` ist eine lokale Fallarbeitsumgebung fuer Beobachtung, Einordnung und quellengebundene Gegenrede-Entwuerfe zu oeffentlichen Social-Media-Inhalten.
 
-Die Basis ist absichtlich restriktiv:
-
-- Keine Fake-Accounts
-- Kein Auto-Posting
-- Keine Bot-Schwaerme
-- Keine vollautonomen Kommentar-Kaempfe
-
-Stattdessen liefert das Projekt:
+ das Projekt:
 
 - Fallverwaltung mit Status, Beschreibung und Kennzahlen
 - Erfassung oeffentlicher Beobachtungen mit Original-URL, Erfassungszeit und Belegregister
-- Collector fuer manuelle Eintraege oder erlaubte Exporte; keine Plattform-Automatisierung
+- Collector fuer manuelle Eintraege oder erlaubte Exporte; 
 - Erkennung dokumentierter Erwaehnungen, Hashtags, gemeinsamer Links, manueller Verknuepfungen und Accountwechsel-Hinweise
 - Profile Resolver mit zeitlich nachvollziehbaren Profil-Snapshots
-- Identity Resolver fuer analystisch hinterlegte Hypothesen inklusive Grundlage, Status und Konfidenz; keine automatische Personenidentifikation
+- Identity Resolver fuer analystisch hinterlegte Hypothesen inklusive Grundlage, Status und Konfidenz;
 - Relationship Engine, Timeline Engine und Graph Viewer mit anklickbarer Beleg-URL und Zeitpunkt pro Kante
 - Suche, Risiko-Filter, Markierungen, Notizen und Screenshot-Referenzen
-- Entwuerfe fuer menschlich freigegebene Faktencheck-Antworten
+- Entwuerfe freigegebener Faktencheck-Antworten
 - Vollstaendiger Fall-Export als JSON und PDF mit Profilen, IDs, Hypothesen, Beziehungen, Chronologie und Belegen
 - SQLite als lokale Standard-Datenbank
 
@@ -69,11 +62,7 @@ python -m unittest discover -s tests
 
 Die Importflaeche akzeptiert eine JSON-Liste mit `handle` und `body` als Pflichtfeldern sowie optionalen Metadaten wie `platform`, `source_url`, `captured_at` und `sources`. Jeder Eintrag wird vor der Speicherung validiert und lokal fingerprinted.
 
-Die Pattern Engine zeigt nur Kandidaten aus vorhandenen Fallbelegen an: wiederkehrende Accounts, gemeinsame Hashtags oder Domains, identische normalisierte Texte und zentrale Knoten. Jede Fundstelle verweist zur zugrunde liegenden Beobachtung.
-
-## SithAssembly-Nomenklatur
-
-Die lokale Arbeitsoberflaeche heisst `SithAssembly//Instawatch`. `src/assembly_manifest.py` ist die einzige Quelle fuer Codenamen wie `SithAssembly//VektorZero`, `SithAssembly//SpectreNet` und `SithAssembly//CipherLedger`. Die zugehoerigen Profilnamen sind interne, lokale Konfigurationsbezeichnungen. Sie stehen nicht fuer gehostete, trainierte oder externe KI-Modelle und aendern weder die Evidenzbindung noch den menschlichen Review.
+Die Pattern Engine zeigt nur Kandidaten aus vorhandenen Fallbelegen an: wiederkehrende Accounts, gemeinsame Hashtags oder Domains, identische normalisierte Texte und zentrale Knoten. Jede Fundstelle verweist zur zugrunde liegenden Beobachtung. Ein Universeller Server wird später integriert.
 
 ## Optionale Analysemodelle
 
@@ -107,7 +96,7 @@ Die Command-Konsole im Interface fuehrt eine lokale, restriktive Teilmenge des a
 /report generate --format pdf
 ```
 
-Die vollstaendige lokal verfuegbare Liste steht in `docs/COMMANDS.md`. `docs/Command-Katalog_Network-Intelligence.pdf` bleibt die unveraenderte Referenz. Nicht aktiviert sind Plattform-Capture, Crawling, Watches, Alerts, Sharing, externe Kommunikation und Identitaetszusammenfuehrungen.
+Die vollstaendige lokal verfuegbare Liste steht in `docs/COMMANDS.md`. `docs/Command-Katalog_Network-Intelligence.pdf` bleibt die unveraenderte Referenz. Noch nicht aktiviert sind Plattform-Capture, Crawling, Watches, Alerts, Sharing, externe Kommunikation und Identitaetszusammenfuehrungen.
 
 ## Bedienung
 
@@ -117,7 +106,3 @@ Die vollstaendige lokal verfuegbare Liste steht in `docs/COMMANDS.md`. `docs/Com
 4. Timeline, Graph und Profiluebersicht nutzen. Netzwerkkanten fuehren direkt zur jeweiligen Quell-URL; die Zeit erscheint neben der Kante.
 5. Notizen, Screenshot-Referenzen und klar als unbestaetigt markierte Hypothesen nur mit belegter Grundlage hinterlegen.
 6. Den Fall ueber die Kopfzeile als JSON oder PDF exportieren.
-
-## Bewusste Grenzen
-
-Wenn du spaeter eine Plattform-Anbindung willst, sollte sie nur ueber offizielle APIs oder einen klar freigegebenen Export/Import-Workflow laufen. Das hier ist die sichere Arbeitsbank fuer Monitoring, Evidenz und Review.
