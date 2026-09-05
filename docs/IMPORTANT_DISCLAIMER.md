@@ -1,9 +1,9 @@
 # Important Disclaimer
 
-SithAssembly//Instawatch ist eine lokale Arbeitsumgebung fuer Evidenz, Kontext und menschliche Fallpruefung. Wahrscheinlichkeiten, Scores, Aehnlichkeiten und Graphmuster sind keine Beweise fuer Identitaet, Absicht, Automatisierung oder Zugehoerigkeit.
+SithAssembly//Instawatch is a local workspace for evidence, context, and human case review. Probabilities, scores, similarities, and graph patterns are not proof of identity, intent, automation, or affiliation.
 
-- Keine Entscheidung oder oeffentliche Behauptung ohne menschliche Pruefung und belegte Grundlage.
-- Keine Identitaetszuordnung aus einem einzelnen Signal.
-- Keine Nutzung fuer Belästigung, Einschuechterung, Doxxing oder automatisierte Eskalation.
-- Unsichere Ergebnisse bleiben als Hypothesen bzw. Review-Kandidaten markiert.
-- Verschluesselte und signierte Vault-Exporte machen Manipulationen pruefbar, begruenden aber keine gerichtliche Verwertbarkeit. Erhebung, Chain of Custody, Zugriffssteuerung und rechtliche Bewertung bleiben separat erforderlich.
+- Do not make a decision or public claim without human review and evidence.
+- Do not assign an identity from a single signal.
+- Do not use the system for harassment, intimidation, doxxing, or automated escalation.
+- Keep uncertain results marked as hypotheses or review candidates.
+- Encrypted and signed Vault exports make tampering detectable, but do not establish legal admissibility. Collection, chain of custody, access controls, and legal assessment require separate processes.

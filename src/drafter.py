@@ -4,8 +4,8 @@ from typing import Any
 
 
 OPENERS = {
-    "neutral": "Die Behauptung ist so nicht belastbar.",
-    "firm": "Das ist sachlich nicht haltbar.",
+    "neutral": "The claim is not supported in this form.",
+    "firm": "This is not factually defensible.",
     "sharp": "Viel Pose, wenig Belege.",
 }
 
@@ -42,11 +42,11 @@ def compose_draft(observation: dict[str, Any], sources: list[dict[str, Any]], to
         }
 
     signal_clause = (
-        "Der Beitrag arbeitet mit "
+        "The post uses "
         + ", ".join(FLAG_LABELS.get(flag, flag.replace("_", " ")) for flag in flags[:3])
         + "."
         if flags
-        else "Der Beitrag braucht vor allem belastbaren Kontext statt Lautstaerke."
+        else "The post needs reliable context rather than volume."
     )
 
     evidence_lines = []
@@ -61,7 +61,7 @@ def compose_draft(observation: dict[str, Any], sources: list[dict[str, Any]], to
     citation_tail = " ".join(f"[{item['index']}] {item['url']}".strip() for item in citations)
     body = (
         f"{opening} {signal_clause} "
-        f"Bevor hier Mythen nachgesprochen werden, lohnt sich der Blick in die Quellen: "
+        f"Before repeating myths, consult the sources: "
         f"{' '.join(evidence_lines)} "
         f"Quellen: {citation_tail}".strip()
     )

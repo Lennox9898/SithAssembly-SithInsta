@@ -1,46 +1,45 @@
-# Externe Bausteine: Ist-Analyse
+# External Components: Current-State Review
 
-Stand: 2026-09-04. Referenz: `docs/Agentenstack_Evaluationsdossier_2026-09-04.pdf`.
+Date: 2026-09-04. Reference: `docs/Agentenstack_Evaluationsdossier_2026-09-04.pdf`.
 
-Diese Bewertung betrachtet nur die aktuelle lokale Arbeitsumgebung. Sie uebernimmt
-keine Software, startet keine Dienste und ersetzt keine eigene Logik. Release-Stand,
-Lizenz, Sicherheitsmeldungen und Kompatibilitaet jedes Kandidaten muessen unmittelbar
-vor einem PoC erneut gegen die jeweilige Primaerquelle geprueft werden.
+This assessment covers only the current local workspace. It does not adopt software,
+start services, or replace project-specific logic. Verify every candidate's current
+release, license, security advisories, and compatibility against primary sources
+immediately before a proof of concept.
 
-## Bestehende Architekturkarte
+## Existing Architecture Map
 
-| Bereich | Vorhandener Anker | Bewertung |
+| Area | Existing anchor | Assessment |
 | --- | --- | --- |
-| HTTP und UI | `app.py`, `src/server.py`, `web/` | Lokaler Server mit API und Fallarbeitsoberflaeche. Kein externer Gateway erforderlich. |
-| Commands | `src/command_engine.py`, `SithAssembly.Runtime.py` | Allowlisted lokale Commands gegen die Fallakte. Kein allgemeiner Shell- oder Tool-Proxy. |
-| Registry und Module | `config/module_registry.json`, `src/module_runtime.py`, `src/assembly_manifest.py` | Explizit deklarierte `src.*`-Module, kontrolliertes Laden und lesbares Manifest. |
-| Koordination | `config/agent_registry.json`, `src/agent_coordination.py`, `src/agent_controller.py` | Lokales Topic- und Capability-Modell; kein externer Message-Broker. |
-| Daten und Graph | `src/database.py`, `src/repository.py`, `src/relationship_engine.py`, `src/graph_viewer.py` | SQLite, evidenzgebundene Kanten, lokale Gruppen und Zentralitaet. |
-| Analyse | `src/comment_anomaly.py`, `src/ocr_engine.py`, `src/local_llm.py` | Optionale lokale Adapter; keine stillen Modell-Downloads oder externen Aufrufe. |
-| Evidenz und Export | `src/evidence_integrity.py`, `src/evidence_vault.py`, `src/report_generator.py` | Fingerprints, opt-in verschluesselte Pakete sowie JSON/PDF-Export. |
-| Telemetrie | `src/runtime_logging.py`, `src/runtime_doctor.py` | Lokale redigierte JSONL-Logs und read-only Runtime-Diagnose. |
-| Deployment | `config/deployment.local.json`, `src/deployment_preflight.py`, `deploy/` | Inaktive Vorbereitungs-Topologie; noch kein gestarteter Cluster. |
+| HTTP and UI | `app.py`, `src/server.py`, `web/` | Local server with API and casework UI. No external gateway is required. |
+| Commands | `src/command_engine.py`, `SithAssembly.Runtime.py` | Allowlisted local commands against the case store, not a general shell or tool proxy. |
+| Registry and modules | `config/module_registry.json`, `src/module_runtime.py`, `src/assembly_manifest.py` | Explicit `src.*` declarations, controlled loading, and a readable manifest. |
+| Coordination | `config/agent_registry.json`, `src/agent_coordination.py`, `src/agent_controller.py` | Local topic and capability model; no external message broker. |
+| Data and graph | `src/database.py`, `src/repository.py`, `src/relationship_engine.py`, `src/graph_viewer.py` | SQLite, evidence-bound edges, local groups, and centrality. |
+| Analysis | `src/comment_anomaly.py`, `src/ocr_engine.py`, `src/local_llm.py` | Optional local adapters; no silent model downloads or external calls. |
+| Evidence and exports | `src/evidence_integrity.py`, `src/evidence_vault.py`, `src/report_generator.py` | Fingerprints, opt-in encrypted packages, and JSON/PDF exports. |
+| Telemetry | `src/runtime_logging.py`, `src/runtime_doctor.py` | Local redacted JSONL logs and read-only runtime diagnostics. |
+| Deployment | `config/deployment.local.json`, `src/deployment_preflight.py`, `deploy/` | Inactive preparation topology; no cluster is running. |
 
-## Kandidaten und Integrationsgrenzen
+## Candidates and Integration Boundaries
 
-| Kandidat | Status | Begruendete Integrationsgrenze |
+| Candidate | Status | Justified integration boundary |
 | --- | --- | --- |
-| IBM ContextForge | Ignorieren vorerst | `src/module_runtime.py` und `config/module_registry.json` loesen die aktuelle lokale Registry-Aufgabe. Erst benchmarken, wenn mehrere externe MCP/A2A-Dienste betrieben werden. |
-| agentgateway | Ignorieren vorerst | Kein externer MCP/A2A- oder gRPC-Traffic vorhanden. Ein zweiter Gateway neben `src/server.py` waere aktuell Doppelstruktur. |
-| NATS JetStream | PoC vormerken | Passt spaeter zu `config/agent_registry.json`-Topics. Ein einzelnes Event muss Idempotenz, Replay, Backpressure und Fehlerpfad nachweisen. |
-| Temporal | PoC vormerken | Erst relevant fuer einen vorhandenen langen, unterbrechbaren Job. Das heutige lokale Request-Modell braucht noch keinen Workflow-Server. |
-| Open Policy Agent | Prioritaet: kleiner PoC | `config/agent_registry.json` enthaelt Rollen, Freigaben und Capabilities. Ein zentraler Policy-Input waere ein klarer Gewinn, wenn fail-closed. |
-| OpenLineage und Rekor | Konzepte uebernehmen | `src/runtime_logging.py`, `src/evidence_integrity.py` und `src/evidence_vault.py` sind die Basis. Zuerst ein internes Run-/Artefakt-Envelope spezifizieren. |
-| OpenCTI | Datenmodell-Muster uebernehmen | Nuetzlich sind Dedup, Confidence, Quellenprioritaet und als `inferred` markierte Kanten. Kein vollstaendiger OpenCTI-Stack. |
-| QUT Coordination Network Toolkit | Methodik bewerten | Plattformneutrale Koordinationsfeatures gegen `src/pattern_engine.py` testen. Ergebnisse bleiben reviewpflichtige Musterkandidaten. |
-| OSINTGraph | Referenz, nicht Kern | Import-, Graph- und UI-Ideen isoliert vergleichen. Keine Kopplung an fragile Zugriffsmethoden. |
-| OpenTelemetry und AgentOps | OTel-first vormerken | `src/runtime_logging.py` ist eine lokale Grundlage. Erst Trace-Contract definieren, dann einen exportierbaren Adapter. |
-| Firecracker, gVisor, Microsandbox | Serverseitig spaeter pruefen | Auf dem lokalen Windows-Entwicklungsplatz kein Gewinn. Fuer untrusted Workloads nur mit Risikoklasse und Netzwerkgrenzen bewerten. |
+| IBM ContextForge | Defer | `src/module_runtime.py` and `config/module_registry.json` already solve local registry needs. Benchmark only when multiple external MCP/A2A services exist. |
+| agentgateway | Defer | There is no external MCP/A2A or gRPC traffic. A second gateway beside `src/server.py` would duplicate structure. |
+| NATS JetStream | Plan a PoC | Fits future `config/agent_registry.json` topics. One event must prove idempotency, replay, backpressure, and failure handling. |
+| Temporal | Plan a PoC | Relevant only for an existing long-running, resumable job. The current request model does not need a workflow server. |
+| Open Policy Agent | Priority: small PoC | `config/agent_registry.json` contains roles, approvals, and capabilities. A central policy input is valuable only when it fails closed. |
+| OpenLineage and Rekor | Reuse concepts | `src/runtime_logging.py`, `src/evidence_integrity.py`, and `src/evidence_vault.py` are the basis. Specify an internal run/artifact envelope first. |
+| OpenCTI | Reuse data-model patterns | Deduplication, confidence, source priority, and explicitly `inferred` edges are useful. Do not adopt the full OpenCTI stack. |
+| QUT Coordination Network Toolkit | Evaluate methodology | Test platform-neutral coordination features against `src/pattern_engine.py`. Results remain review-required pattern candidates. |
+| OSINTGraph | Reference, not core | Compare import, graph, and UI ideas in isolation. Do not couple to fragile access methods. |
+| OpenTelemetry and AgentOps | Plan OTel-first | `src/runtime_logging.py` is a local basis. Define a trace contract before an exportable adapter. |
+| Firecracker, gVisor, Microsandbox | Evaluate later on server | No gain on the local Windows workstation. Evaluate untrusted workloads only with risk classes and network boundaries. |
 
-## Entscheidung
+## Decision
 
-Die naechste sinnvolle Aenderung ist kein Framework-Import. Prioritaet haben drei
-kleine, messbare Vertrage: Policy-Input, Event-Envelope und Provenance-Envelope.
-Sie halten die lokale Architektur kompatibel mit OPA, NATS/JetStream und OTel,
-ohne einen der Dienste vorauszusetzen. Der bestehende Command-Core und die
-evidenzgebundene Fallarbeit bleiben der Bezugspunkt.
+The next useful change is not a framework import. Prioritize three small, measurable
+contracts: a policy input, event envelope, and provenance envelope. They keep the
+local architecture compatible with OPA, NATS/JetStream, and OTel without requiring
+any of those services. The command core and evidence-bound casework remain central.

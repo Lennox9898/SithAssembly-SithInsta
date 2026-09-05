@@ -84,7 +84,7 @@ def score_text(text: str) -> AnalysisResult:
     risk_level = min(100, sum(SIGNAL_WEIGHTS[flag] for flag in matches))
     severity = _label_for_score(risk_level)
     if not matches:
-        summary = "Keine direkten Heuristik-Treffer. Menschliche Sichtung bleibt erforderlich."
+        summary = "No direct heuristic matches. Human review remains required."
     else:
         summary = (
             f"Erkannte Signale: {', '.join(matches)}. "

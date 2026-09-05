@@ -9,7 +9,8 @@ from typing import Any
 from src.runtime_logging import RuntimeLogger
 
 
-IMPORT_PATH = re.compile(r"^src(?:\.[a-z_][a-z0-9_]*)+$")
+# Nested SithAssembly packages are explicitly declared in the local registry.
+IMPORT_PATH = re.compile(r"^src(?:\.[A-Za-z_][A-Za-z0-9_]*)+$")
 
 
 class ModuleRuntime:

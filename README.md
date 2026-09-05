@@ -1,20 +1,20 @@
 # Signal Desk
 
-`Signal Desk` ist eine lokale Fallarbeitsumgebung fuer Beobachtung, Einordnung und quellengebundene Gegenrede-Entwuerfe zu oeffentlichen Social-Media-Inhalten.
+`Signal Desk` is a local casework environment for observing, assessing, and drafting evidence-bound responses to public social-media content.
 
- das Projekt:
+The project provides:
 
-- Fallverwaltung mit Status, Beschreibung und Kennzahlen
-- Erfassung oeffentlicher Beobachtungen mit Original-URL, Erfassungszeit und Belegregister
-- Collector fuer manuelle Eintraege oder erlaubte Exporte; 
-- Erkennung dokumentierter Erwaehnungen, Hashtags, gemeinsamer Links, manueller Verknuepfungen und Accountwechsel-Hinweise
-- Profile Resolver mit zeitlich nachvollziehbaren Profil-Snapshots
-- Identity Resolver fuer analystisch hinterlegte Hypothesen inklusive Grundlage, Status und Konfidenz;
-- Relationship Engine, Timeline Engine und Graph Viewer mit anklickbarer Beleg-URL und Zeitpunkt pro Kante
-- Suche, Risiko-Filter, Markierungen, Notizen und Screenshot-Referenzen
-- Entwuerfe freigegebener Faktencheck-Antworten
-- Vollstaendiger Fall-Export als JSON und PDF mit Profilen, IDs, Hypothesen, Beziehungen, Chronologie und Belegen
-- SQLite als lokale Standard-Datenbank
+- Case management with status, description, and metrics.
+- Capture of public observations with source URL, capture time, and an evidence register.
+- A collector for manual entries or permitted exports.
+- Detection of documented mentions, hashtags, shared links, manual connections, and account-change indicators.
+- Profile snapshots with time-based comparison.
+- Analyst-entered identity hypotheses with evidence, state, and confidence.
+- Relationship, timeline, and graph views with clickable evidence URLs and timestamps for each edge.
+- Search, risk filters, labels, notes, and screenshot references.
+- Drafts for approved fact-check responses.
+- Complete JSON and PDF case exports with profiles, IDs, hypotheses, relationships, chronology, and evidence.
+- SQLite as the default local database.
 
 ## Start
 
@@ -22,9 +22,9 @@
 .\RUN.bat
 ```
 
-Danach ist das Interface unter `http://127.0.0.1:8080` erreichbar.
+The interface is then available at `http://127.0.0.1:8080`.
 
-Fuer vollstaendige lokale Entwicklungsprotokolle: `.\DEV.bat`. Laufzeitstatus, lokale CommandDeck-Befehle und Log-Export stehen ueber `python SithAssembly.Runtime.py ...` bereit. Details: `docs/RUNTIME.md`.
+For complete local development logs, run `.\DEV.bat`. Runtime state, local CommandDeck commands, and log export are available through `python SithAssembly.Runtime.py ...`. See `docs/RUNTIME.md`.
 
 ## Tests
 
@@ -32,77 +32,77 @@ Fuer vollstaendige lokale Entwicklungsprotokolle: `.\DEV.bat`. Laufzeitstatus, l
 python -m unittest discover -s tests
 ```
 
-## Architektur
+## Architecture
 
-- `app.py`: Startpunkt
-- `src/database.py`: SQLite-Schema und Verbindungslogik
-- `src/repository.py`: Persistenz und Datenzugriff
-- `src/collector.py`: Normalisierung sowie Mention-, Hashtag- und Link-Extraktion
-- `src/profile_resolver.py`: Profil-Snapshot- und Aenderungsvergleich
-- `src/identity_resolver.py`: validiert analystisch erfasste Identitaetshypothesen
-- `src/relationship_engine.py`: konservative, evidenzgebundene Kanten
-- `src/timeline_engine.py`: zeitliche Zusammenfuehrung
-- `src/graph_viewer.py`: Gruppen, Grad und Zentralitaet
-- `src/case_manager.py`: Anwendungs-Fassade fuer Fallakten und Suche
-- `src/report_generator.py`: JSON- und lokaler PDF-Bericht
-- `src/agent_controller.py`: sichtbare Verarbeitungsstufen
-- `src/command_engine.py`: allowlisted Slash-Commands gegen die lokale Fallakte
-- `src/case_importer.py`: Validierung manueller oder offiziell exportierter JSON-Daten
-- `src/evidence_integrity.py`: lokale Content- und Kontext-Fingerprints
-- `src/pattern_engine.py`: evidenzgebundene Musterkandidaten fuer Accounts, Hashtags, Domains und identische Texte
-- `src/analyzer.py`: Risiko-Signale und einfache Klassifikation
-- `src/drafter.py`: knappe, quellengebundene Antwortentwuerfe
-- `src/server.py`: HTTP-API und statische Auslieferung
-- `src/module_runtime.py`: explizite JSON-Registry und kontrolliertes Modul-Hooking beim Start
-- `src/runtime_logging.py`: lokale JSONL-Runtime-Protokolle mit Redaction sensibler Felder
-- `config/module_registry.json`: erlaubte, beim Start geladene `src.*`-Module
-- `web/`: lokales Casework-Interface
+- `app.py`: entry point.
+- `src/database.py`: SQLite schema and connection logic.
+- `src/repository.py`: persistence and data access.
+- `src/collector.py`: normalization and mention, hashtag, and link extraction.
+- `src/profile_resolver.py`: profile snapshots and change comparison.
+- `src/identity_resolver.py`: validates analyst-entered identity hypotheses.
+- `src/relationship_engine.py`: conservative, evidence-bound edges.
+- `src/timeline_engine.py`: chronological aggregation.
+- `src/graph_viewer.py`: groups, degree, and centrality.
+- `src/case_manager.py`: casework and search facade.
+- `src/report_generator.py`: JSON and local PDF reports.
+- `src/agent_controller.py`: visible processing stages.
+- `src/command_engine.py`: allowlisted slash commands for local cases.
+- `src/case_importer.py`: validation for manual and officially exported JSON data.
+- `src/evidence_integrity.py`: local content and context fingerprints.
+- `src/pattern_engine.py`: evidence-bound candidates for accounts, hashtags, domains, and repeated text.
+- `src/analyzer.py`: risk signals and basic classification.
+- `src/drafter.py`: concise, source-bound response drafts.
+- `src/server.py`: HTTP API and static file delivery.
+- `src/module_runtime.py`: explicit JSON registry and controlled module startup hooks.
+- `src/runtime_logging.py`: local JSONL runtime logs with sensitive-field redaction.
+- `config/module_registry.json`: the allowed `src.*` modules loaded at startup.
+- `web/`: local casework interface.
 
-## Import und Muster
+## Import and Patterns
 
-Die Importflaeche akzeptiert eine JSON-Liste mit `handle` und `body` als Pflichtfeldern sowie optionalen Metadaten wie `platform`, `source_url`, `captured_at` und `sources`. Jeder Eintrag wird vor der Speicherung validiert und lokal fingerprinted.
+The import surface accepts a JSON list with required `handle` and `body` fields and optional metadata including `platform`, `source_url`, `captured_at`, and `sources`. Every entry is validated and fingerprinted locally before storage.
 
-Die Pattern Engine zeigt nur Kandidaten aus vorhandenen Fallbelegen an: wiederkehrende Accounts, gemeinsame Hashtags oder Domains, identische normalisierte Texte und zentrale Knoten. Jede Fundstelle verweist zur zugrunde liegenden Beobachtung. Ein Universeller Server wird später integriert.
+The Pattern Engine only presents candidates based on case evidence: recurring accounts, shared hashtags or domains, identical normalized text, and central nodes. Every finding links to the underlying observation. A general-purpose server will be integrated later.
 
-## Optionale Analysemodelle
+## Optional Analysis Models
 
-`SithAssembly//SignalForge` nutzt bei installierten optionalen Abhaengigkeiten PyOD ECOD fuer lokale Kommentar-Ausreisser. `SithAssembly//GlyphWatch` bindet PaddleOCR 3 / PP-OCRv6 fuer explizit hochgeladene lokale Bildbelege ein. Beides ist opt-in: Es gibt keine automatische Paketinstallation, keinen stillen Gewichtsdownload und kein Abrufen externer Inhalte. Auswahl, Installation und Grenzen stehen in `docs/MODEL_INTEGRATIONS.md`.
+`SithAssembly//SignalForge` uses PyOD ECOD for local comment-outlier candidates when the optional dependency is installed. `SithAssembly//GlyphWatch` uses PaddleOCR 3 / PP-OCRv6 for explicitly uploaded local image evidence. Both are opt-in: there is no automatic package installation, silent model download, or external content retrieval. See `docs/MODEL_INTEGRATIONS.md` for selection, setup, and limits.
 
-Ein spaeterer Qwen-Entwurf trennt sichtbare, beleggebundene Fakten von einer darunter dargestellten, lesbaren Modellbewertung mit Konfidenz und Unsicherheiten. Der Ausgabevertrag steht in `docs/QWEN_OUTPUT.md` und `config/qwen_response_contract.json`.
+The planned Qwen output separates visible evidence-bound facts from a readable model assessment with confidence and uncertainty. The contract is in `docs/QWEN_OUTPUT.md` and `config/qwen_response_contract.json`.
 
-Lokale Agentenmodelle koennen ueber Ollama, llama.cpp oder vLLM angebunden werden. Die editierbare Provider-Registry, der lokale LLM-API-Vertrag und die Startreihenfolge stehen in `docs/LOCAL_MODELS.md`.
+Local agent models can be connected through Ollama, llama.cpp, or vLLM. The editable provider registry, local LLM API contract, and startup sequence are in `docs/LOCAL_MODELS.md`.
 
-`python app.py --check-config` prueft alle lokalen Registries ohne Serverstart. `python app.py --print-capabilities` und `python SithAssembly.Runtime.py doctor` zeigen lesbar, ob CUDA sowie optionale Beschleuniger wie xFormers oder FlashAttention lokal erkannt werden. Diese Diagnose installiert und aktiviert nichts automatisch.
+`python app.py --check-config` validates all local registries without starting a server. `python app.py --print-capabilities` and `python SithAssembly.Runtime.py doctor` report whether CUDA and optional accelerators such as xFormers or FlashAttention are present. These diagnostics install and enable nothing automatically.
 
-## Server-Vorbereitung
+## Server Preparation
 
-`deploy/` enthaelt eine standardmaessig inaktive Compose-Topologie fuer PostgreSQL, S3-kompatiblen Belegspeicher, NATS JetStream sowie getrennte API- und Worker-Rollen. `python SithAssembly.Deploy.py preflight` prueft die Vorbereitung ohne Docker zu starten. Die genaue Aktivierungsreihenfolge steht in `docs/DEPLOYMENT_PREP.md`.
+`deploy/` contains an inactive Compose topology for PostgreSQL, S3-compatible evidence storage, NATS JetStream, and separate API and worker roles. `python SithAssembly.Deploy.py preflight` checks preparation without starting Docker. The activation sequence is in `docs/DEPLOYMENT_PREP.md`.
 
-Das externe Agentenstack-Dossier ist unveraendert unter `docs/Agentenstack_Evaluationsdossier_2026-09-04.pdf` abgelegt. Die daraus abgeleitete Ist-Analyse, Scorecard und begrenzte PoC-Reihenfolge stehen in `docs/architecture/` und fuehren keine Fremdkomponente automatisch ein.
+The external agent-stack dossier is stored unchanged at `docs/Agentenstack_Evaluationsdossier_2026-09-04.pdf`. Its derived current-state review, scorecard, and bounded PoC sequence are in `docs/architecture/`; they do not automatically add third-party components.
 
 ## EvidenceVault
 
-`SithAssembly//EvidenceVault` erzeugt fuer einen bestehenden Fall ein lokales `.sifvault.json`-Paket mit ZIP-Nutzlast, SHA-256-Manifest, AES-256-GCM-Verschluesselung, scrypt-Key-Derivation und Ed25519-Signatur. Die Passphrase wird nur fuer die Erstellung verwendet und nicht persistiert. Im Interface ist der Export opt-in; alternativ steht `python SIF_EvidenceVault.py create --case-id <id>` bereit. Details: `docs/MODULE_RUNTIME.md` und `docs/IMPORTANT_DISCLAIMER.md`.
+`SithAssembly//EvidenceVault` creates an opt-in `.sifvault.json` package for an existing case with a ZIP payload, SHA-256 manifest, AES-256-GCM encryption, scrypt key derivation, and Ed25519 signature. The passphrase is used only during package creation and is not persisted. The UI export is opt-in; alternatively run `python SIF_EvidenceVault.py create --case-id <id>`. See `docs/MODULE_RUNTIME.md` and `docs/IMPORTANT_DISCLAIMER.md`.
 
-## Command-Konsole
+## Command Console
 
-Die Command-Konsole im Interface fuehrt eine lokale, restriktive Teilmenge des abgelegten Katalogs direkt aus. Beispiele:
+The interface console executes a local, restricted subset of the stored command catalog. Examples:
 
 ```text
-/find posts --query "Begriff" --limit 20
-/profile connections @konto
-/graph path @konto_a @konto_b --max-hops 4
+/find posts --query "term" --limit 20
+/profile connections @account
+/graph path @account_a @account_b --max-hops 4
 /timeline build
 /report generate --format pdf
 ```
 
-Die vollstaendige lokal verfuegbare Liste steht in `docs/COMMANDS.md`. `docs/Command-Katalog_Network-Intelligence.pdf` bleibt die unveraenderte Referenz. Noch nicht aktiviert sind Plattform-Capture, Crawling, Watches, Alerts, Sharing, externe Kommunikation und Identitaetszusammenfuehrungen.
+The complete locally available list is in `docs/COMMANDS.md`. `docs/Command-Katalog_Network-Intelligence.pdf` remains an unchanged reference. Platform capture, crawling, watches, alerts, sharing, external communication, and identity consolidation are not enabled.
 
-## Bedienung
+## Using the Interface
 
-1. Mit `python app.py` starten und `http://127.0.0.1:8080` oeffnen.
-2. Einen Fall anlegen oder den lokalen Eingang verwenden.
-3. Beobachtung mit Original-URL und Zeitpunkt erfassen. Der Collector verknuepft explizite Erwähnungen, Hashtags und Links mit dieser Beobachtung.
-4. Timeline, Graph und Profiluebersicht nutzen. Netzwerkkanten fuehren direkt zur jeweiligen Quell-URL; die Zeit erscheint neben der Kante.
-5. Notizen, Screenshot-Referenzen und klar als unbestaetigt markierte Hypothesen nur mit belegter Grundlage hinterlegen.
-6. Den Fall ueber die Kopfzeile als JSON oder PDF exportieren.
+1. Start with `python app.py` and open `http://127.0.0.1:8080`.
+2. Create a case or use the local inbox.
+3. Record an observation with its source URL and timestamp.
+4. Use the timeline, graph, and profile view. Graph edges link to their source URL and display time.
+5. Add notes, screenshot references, and clearly marked unconfirmed hypotheses only with evidence.
+6. Export the case from the header as JSON or PDF.

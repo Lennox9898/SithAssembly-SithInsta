@@ -1,9 +1,3 @@
-from __future__ import annotations
-
-from typing import Any
-
-
-class TimelineEngine:
-    @staticmethod
-    def merge(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        return sorted(events, key=lambda event: (event.get("timestamp", ""), event.get("id", 0)), reverse=True)
+from importlib import import_module as _import_module
+import sys as _sys
+_sys.modules[__name__] = _import_module("src.SithAssembly.ChronoWatch.timeline_engine")

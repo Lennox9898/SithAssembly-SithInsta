@@ -858,7 +858,7 @@ class Repository:
         if not confirmed:
             return {
                 "state": "confirmation_required",
-                "message": "Die Ausfuehrung kann beim ersten Lauf lokale PaddleOCR-Modelldateien laden. Bestaetigung erforderlich.",
+                "message": "The first run may download local PaddleOCR model files. Confirmation is required.",
             }
         with open_connection(self.db_path) as connection:
             evidence = connection.execute(
@@ -1425,7 +1425,7 @@ class Repository:
                 timestamp = utc_timestamp()
                 cursor = connection.execute(
                     "INSERT INTO cases (title, description, status, created_at, updated_at) VALUES (?, ?, 'open', ?, ?)",
-                    ("Unsortierte Beobachtungen", "Lokaler Eingang fuer noch nicht zugeordnete Beobachtungen.", timestamp, timestamp),
+                    ("Unsorted observations", "Local inbox for observations that have not yet been assigned.", timestamp, timestamp),
                 )
                 default_case_id = int(cursor.lastrowid)
             else:

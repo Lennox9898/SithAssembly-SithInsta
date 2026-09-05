@@ -1,40 +1,37 @@
-# Externe Bausteine: Begrenzter PoC-Plan
+# External Components: Bounded PoC Plan
 
-Stand: 2026-09-04. Dieser Plan ist bewusst analyse-first. Kein Abschnitt startet
-einen Dienst, installiert Abhaengigkeiten oder migriert Daten. Alle PoCs laufen
-parallel zum bestehenden lokalen Ablauf und muessen entfernbar bleiben.
+Date: 2026-09-04. This plan is deliberately analysis-first. No section starts a
+service, installs dependencies, or migrates data. Every PoC runs alongside the
+existing local workflow and must remain removable.
 
-## Phase 0: Vertraege vor Infrastruktur
+## Phase 0: Contracts Before Infrastructure
 
-1. **Policy-Input:** Ein JSON-kompatibles Objekt fuer Rolle, Modul, Capability,
-   Datenklasse, Aktion und Limits. Anker: `config/agent_registry.json`.
-   Erfolg: fuenf vorhandene Entscheidungen koennen reproduzierbar bewertet werden;
-   bei Policy-Fehler wird abgelehnt.
-2. **Event-Envelope:** `schema_version`, `event_id`, `trace_id`, `occurred_at`,
-   `actor`, `subject`, `payload_ref` und `idempotency_key`. Anker:
-   `src/agent_coordination.py` und `src/agent_controller.py`.
-   Erfolg: eine lokale Simulation erkennt ein dupliziertes Event und verarbeitet
-   eine gespeicherte Sequenz deterministisch erneut.
-3. **Provenance-Envelope:** Run-ID, Modul-/Modellprofil, Eingabe-Fingerprint,
-   Quellreferenzen, Ergebnis-Fingerprint und Fehlerstatus. Anker:
+1. **Policy input:** A JSON-compatible object for role, module, capability, data
+   class, action, and limits. Anchor: `config/agent_registry.json`.
+   Success: five existing decisions can be evaluated reproducibly; policy errors deny access.
+2. **Event envelope:** `schema_version`, `event_id`, `trace_id`, `occurred_at`,
+   `actor`, `subject`, `payload_ref`, and `idempotency_key`. Anchors:
+   `src/agent_coordination.py` and `src/agent_controller.py`.
+   Success: a local simulation detects a duplicate event and deterministically replays a stored sequence.
+3. **Provenance envelope:** Run ID, module/model profile, input fingerprint,
+   source references, output fingerprint, and error state. Anchors:
    `src/evidence_integrity.py`, `src/evidence_vault.py`, `src/runtime_logging.py`.
-   Erfolg: ein Artefakt kann lokal auf Integritaet und Herkunft zurueckgefuehrt
-   werden, ohne Klartextbelege in Telemetrie zu schreiben.
+   Success: an artifact can be traced locally to its integrity and origin without putting plaintext evidence in telemetry.
 
-## Phase 1: Einzelne, austauschbare PoCs
+## Phase 1: Individual, Replaceable PoCs
 
-| PoC | Kandidat | Umfang | Exit-Kriterium | Stop-Kriterium |
+| PoC | Candidate | Scope | Exit criterion | Stop criterion |
 | --- | --- | --- | --- | --- |
-| Policy | OPA | Fuenf fest definierte lokale Zugriffsentscheidungen ueber Adapter pruefen. | Alle erlaubten und verweigerten Faelle sind reproduzierbar; Ausfall ist fail-closed. | Kein klarer Vorteil gegen deklarative lokale Regeln. |
-| Event | NATS JetStream | Einen Eventtyp mit zwei Produzenten, drei Consumern, Worker-Crash und Replay testen. | Keine doppelte Fallaktion; Backpressure und Wiederanlauf sind messbar. | Zusatzbetrieb ohne Robustheitsgewinn. |
-| Workflow | Temporal | Einen langen lokalen Analyse-/Importlauf mit Checkpoint, Timeout und manueller Pause abbilden. | Crash/Resume bewahrt Status und Belegreferenzen. | Kein reprasentativer Langlaufjob oder zu hohe Betriebsbelastung. |
-| Telemetrie | OpenTelemetry | Einen Trace fuer Command -> Policy -> Worker -> Artefakt bilden; Redaction testen. | Keine Secrets oder Beleginhalte im Export, Korrelation bleibt nachvollziehbar. | Trace-Contract nicht stabil oder Debugging schlechter als JSONL. |
-| Graphqualitaet | OpenCTI- und QUT-Muster | Synthetischen Korpus mit Aliasen, Konflikten, koordinierten und normalen Gruppen auswerten. | Konfidenz, `inferred`, Fehlalarme und Beleglinks sind nachvollziehbar. | Kein Gewinn gegen einfachere Regeln. |
+| Policy | OPA | Test five fixed local access decisions through an adapter. | Allowed and denied cases are reproducible; failure is fail-closed. | No clear benefit over declarative local rules. |
+| Event | NATS JetStream | Test one event type with two producers, three consumers, worker crash, and replay. | No duplicate case action; backpressure and recovery are measurable. | Extra operations without a robustness gain. |
+| Workflow | Temporal | Model one long local analysis/import run with checkpoint, timeout, and manual pause. | Crash/resume preserves state and evidence references. | No representative long-running job or excessive operational burden. |
+| Telemetry | OpenTelemetry | Create a Command -> Policy -> Worker -> Artifact trace and test redaction. | No secrets or evidence contents in exports; correlation remains traceable. | Unstable trace contract or worse debugging than JSONL. |
+| Graph quality | OpenCTI and QUT patterns | Evaluate a synthetic corpus with aliases, conflicts, coordinated, and normal groups. | Confidence, `inferred`, false positives, and evidence links are traceable. | No gain over simpler rules. |
 
-## Reihenfolge und Schutzgrenzen
+## Order and Guardrails
 
-1. Zuerst die drei Vertraege schreiben und mit Unit-Tests absichern.
-2. Danach hoechstens einen Dienst-PoC gleichzeitig ausfuehren.
-3. Vor jedem PoC aktuelle Primaerquellen fuer Release, Lizenz, Advisories und Self-Hosting pruefen.
-4. Keine Plattform-Automatisierung, keine nicht autorisierte Datenerhebung und keine Ausleitung von Fallinhalten an externe Observability-Dienste.
-5. Erst nach einem bestandenen PoC eine separate Integrationsentscheidung treffen.
+1. Write the three contracts first and protect them with unit tests.
+2. Run no more than one service PoC at a time.
+3. Before every PoC, verify primary sources for releases, licenses, advisories, and self-hosting.
+4. Do not automate platform activity, collect data without authorization, or export case contents to external observability services.
+5. Make a separate integration decision only after a PoC passes.
