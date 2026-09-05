@@ -1,47 +1,15 @@
-SithAssembly//SithInsta is the Instagram Victim Guardian for protecting Vulnerable group’s and keeping an Eye on Suspects
+# SithAssembly//SithInsta 
 
-The project provides:
+It is the Instagram Guardian for protecting vulnerable groups and keeping an eye on suspects.
 
-- Case management with status, description, and metrics.
-- Capture of public observations with source URL, capture time, and an evidence register.
-- A collector for manual entries or permitted exports.
-- Detection of documented mentions, hashtags, shared links, manual connections, and account-change indicators.
-- Profile snapshots with time-based comparison.
-- Analyst-entered identity hypotheses with evidence, state, and confidence.
-- Relationship, timeline, and graph views with clickable evidence URLs and timestamps for each edge.
-- Search, risk filters, labels, notes, and screenshot references.
-- Drafts for approved fact-check responses.
-- Complete JSON and PDF case exports with profiles, IDs, hypotheses, relationships, chronology, and evidence.
-- SQLite as the default local database.
+it is Running on SithAssembly Framework , Allowing easy to use changeable Modules in dynamic use Cases,
+SithAssembly will can be used with multiple languages and Finally Fine-Tuned in Assembly code ,
 
-## Start
+SithAssembly will be the effort to Connect AI with ASM and even Bytecode. 
 
-```powershell
-.\RUN.bat
-```
+ # The current repository only holds Python 
+ # and for future Updates also Rust.
 
-The interface is then available at `http://127.0.0.1:8080`.
-
-For complete local development logs, run `.\DEV.bat`. Runtime state, local CommandDeck commands, and log export are available through `python SithAssembly.Runtime.py ...`. See `docs/RUNTIME.md`.
-
-## Tests
-
-```powershell
-python -m unittest discover -s tests
-```
-
-## Architecture
-
-- `app.py`: entry point.
-- `src/database.py`: SQLite schema and connection logic.
-- `src/repository.py`: persistence and data access.
-- `src/collector.py`: normalization and mention, hashtag, and link extraction.
-- `src/profile_resolver.py`: profile snapshots and change comparison.
-- `src/identity_resolver.py`: validates analyst-entered identity hypotheses.
-- `src/relationship_engine.py`: conservative, evidence-bound edges.
-- `src/timeline_engine.py`: chronological aggregation.
-- `src/graph_viewer.py`: groups, degree, and centrality.
-- `src/case_manager.py`: casework and search facade.
 - `src/report_generator.py`: JSON and local PDF reports.
 - `src/agent_controller.py`: visible processing stages.
 - `src/command_engine.py`: allowlisted slash commands for local cases.
