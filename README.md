@@ -1,6 +1,4 @@
-# Signal Desk
-
-`Signal Desk` is a local casework environment for observing, assessing, and drafting evidence-bound responses to public social-media content.
+SithAssembly//SithInsta is the Instagram Victim Guardian for protecting Vulnerable group’s and keeping an Eye on Suspects
 
 The project provides:
 
