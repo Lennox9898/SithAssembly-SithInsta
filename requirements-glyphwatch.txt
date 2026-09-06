@@ -2,4 +2,4 @@
 # from its official wheel index before installing these application packages.
 paddleocr==3.7.0
 transformers==5.16.1
-Pillow>=10,<12
+Pillow>=12.3.0,<13
