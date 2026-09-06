@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -7,7 +8,7 @@ from pathlib import Path
 
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = ROOT_DIR / "data"
+DATA_DIR = Path(os.environ.get("SITH_DATA_DIR", ROOT_DIR / "data")).resolve()
 DB_PATH = DATA_DIR / "signal_desk.db"
 
 SCHEMA = """
@@ -223,6 +224,53 @@ CREATE TABLE IF NOT EXISTS ocr_runs (
     FOREIGN KEY(evidence_id) REFERENCES evidence(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS agent_jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    case_id INTEGER NOT NULL,
+    topic TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    input_json TEXT NOT NULL,
+    input_hash TEXT NOT NULL,
+    configuration_version TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'queued',
+    attempt_count INTEGER NOT NULL DEFAULT 0,
+    max_attempts INTEGER NOT NULL DEFAULT 3,
+    result_json TEXT NOT NULL DEFAULT '{}',
+    error_type TEXT,
+    created_at TEXT NOT NULL,
+    started_at TEXT,
+    completed_at TEXT,
+    cancelled_at TEXT,
+    FOREIGN KEY(case_id) REFERENCES cases(id) ON DELETE CASCADE,
+    UNIQUE(case_id, topic, agent_id, input_hash, configuration_version)
+);
+
+CREATE TABLE IF NOT EXISTS agent_job_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id INTEGER NOT NULL,
+    event_id TEXT NOT NULL UNIQUE,
+    event_type TEXT NOT NULL,
+    state TEXT NOT NULL,
+    envelope_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(job_id) REFERENCES agent_jobs(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS depth_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    case_id INTEGER NOT NULL,
+    evidence_id INTEGER NOT NULL,
+    engine TEXT NOT NULL,
+    model_profile TEXT NOT NULL,
+    state TEXT NOT NULL,
+    artifact_path TEXT,
+    artifact_sha256 TEXT,
+    result_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(case_id) REFERENCES cases(id) ON DELETE CASCADE,
+    FOREIGN KEY(evidence_id) REFERENCES evidence(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS vault_exports (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     case_id INTEGER NOT NULL,
@@ -245,7 +293,10 @@ CREATE INDEX IF NOT EXISTS idx_command_history_case ON command_history(case_id, 
 CREATE INDEX IF NOT EXISTS idx_observation_fingerprints_hash ON observation_fingerprints(content_hash);
 CREATE INDEX IF NOT EXISTS idx_import_batches_case ON import_batches(case_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_ocr_runs_evidence ON ocr_runs(evidence_id, id DESC);
+CREATE INDEX IF NOT EXISTS idx_depth_runs_evidence ON depth_runs(evidence_id, id DESC);
 CREATE INDEX IF NOT EXISTS idx_vault_exports_case ON vault_exports(case_id, id DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_jobs_case_state ON agent_jobs(case_id, state, id DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_job_events_job ON agent_job_events(job_id, id ASC);
 """
 
 

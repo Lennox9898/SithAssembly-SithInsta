@@ -1,0 +1,10 @@
+.git/
+.venv/
+.runtime/
+data/
+__pycache__/
+*.py[cod]
+*.db
+*.sifvault.json
+deploy/.env.local
+config/*.local.json

@@ -8,13 +8,47 @@ services:
       dockerfile: deploy/Containerfile
     environment:
       SITH_DEPLOYMENT_PROFILE: prepared_local
+      SITH_DATA_DIR: /var/lib/sithassembly/data
+      SITH_RUNTIME_DIR: /var/lib/sithassembly/runtime
+      SITH_HUGGINGFACE_CACHE_DIR: /var/lib/sithassembly/runtime/huggingface
+      SITH_PADDLEX_CACHE_DIR: /var/lib/sithassembly/runtime/paddlex
     ports:
       - "127.0.0.1:${SITH_API_PORT:-8080}:8080"
     read_only: true
     tmpfs:
       - /tmp
     volumes:
-      - ../data:/app/data
+      - ${SITH_HOST_DATA_DIR:-../data}:/var/lib/sithassembly/data
+      - ${SITH_HOST_RUNTIME_DIR:-../.runtime}:/var/lib/sithassembly/runtime
+
+  api-gpu:
+    profiles: ["gpu"]
+    build:
+      context: ..
+      dockerfile: deploy/Containerfile
+      args:
+        SITH_ENABLE_GLYPHWATCH: "1"
+    environment:
+      SITH_DEPLOYMENT_PROFILE: prepared_gpu
+      SITH_DATA_DIR: /var/lib/sithassembly/data
+      SITH_RUNTIME_DIR: /var/lib/sithassembly/runtime
+      SITH_HUGGINGFACE_CACHE_DIR: /var/lib/sithassembly/runtime/huggingface
+      SITH_PADDLEX_CACHE_DIR: /var/lib/sithassembly/runtime/paddlex
+    ports:
+      - "127.0.0.1:${SITH_API_PORT:-8080}:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      - ${SITH_HOST_DATA_DIR:-../data}:/var/lib/sithassembly/data
+      - ${SITH_HOST_RUNTIME_DIR:-../.runtime}:/var/lib/sithassembly/runtime
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
   worker:
     profiles: ["workers"]
@@ -24,6 +58,11 @@ services:
     command: ["python", "SithAssembly.Deploy.py", "preflight"]
     environment:
       SITH_DEPLOYMENT_PROFILE: prepared_local
+      SITH_DATA_DIR: /var/lib/sithassembly/data
+      SITH_RUNTIME_DIR: /var/lib/sithassembly/runtime
+    volumes:
+      - ${SITH_HOST_DATA_DIR:-../data}:/var/lib/sithassembly/data
+      - ${SITH_HOST_RUNTIME_DIR:-../.runtime}:/var/lib/sithassembly/runtime
 
   postgres:
     profiles: ["infrastructure"]

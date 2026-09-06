@@ -49,13 +49,35 @@ class RuntimeDoctor:
         except (OSError, ValueError, json.JSONDecodeError) as error:
             checks.append({"name": "local_model_registry", "state": "error", "detail": f"{type(error).__name__}: {error}"})
 
-        for filename in ("agent_registry.json", "clawdbot.local.json", "qwen_response_contract.json"):
+        for filename in (
+            "agent_registry.json",
+            "clawdbot.local.json",
+            "qwen_response_contract.json",
+            "embedded_model_registry.json",
+        ):
             try:
                 payload = json.loads((self.root_dir / "config" / filename).read_text(encoding="utf-8"))
-                checks.append({"name": filename, "state": "ok" if isinstance(payload, dict) else "error"})
+                state = "ok" if isinstance(payload, dict) else "error"
+                if filename == "embedded_model_registry.json":
+                    profiles = payload.get("profiles", []) if isinstance(payload, dict) else []
+                    state = "ok" if profiles and all(self._valid_embedded_profile(profile) for profile in profiles) else "error"
+                checks.append({"name": filename, "state": state})
             except (OSError, json.JSONDecodeError) as error:
                 checks.append({"name": filename, "state": "error", "detail": f"{type(error).__name__}: {error}"})
         return {"state": "ok" if all(check["state"] == "ok" for check in checks) else "error", "checks": checks}
+
+    @staticmethod
+    def _valid_embedded_profile(profile: Any) -> bool:
+        if not isinstance(profile, dict):
+            return False
+        common = {"id", "module", "runtime", "enabled"}
+        if not common <= set(profile):
+            return False
+        if {"detector", "recognizer"} <= set(profile):
+            return {"cache_dir", "paddlex_cache_dir"} <= set(profile)
+        if "model_dir" in profile:
+            return {"repository", "revision", "output"} <= set(profile)
+        return False
 
     @staticmethod
     def _acceleration() -> dict[str, Any]:

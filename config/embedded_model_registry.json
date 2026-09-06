@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "notes": "Human-editable registry for optional embedded models. The runtime never downloads or installs dependencies without an explicit OCR request.",
+  "profiles": [
+    {
+      "id": "GlyphWatch.PP-OCRv6-Small/1.1",
+      "module": "SithAssembly//GlyphWatch",
+      "enabled": true,
+      "purpose": "OCR for explicitly uploaded local image evidence",
+      "runtime": "PaddleOCR with Transformers",
+      "cache_dir": ".runtime/huggingface",
+      "paddlex_cache_dir": ".runtime/paddlex",
+      "device": "auto",
+      "detector": {
+        "model_name": "PP-OCRv6_small_det",
+        "repository": "PaddlePaddle/PP-OCRv6_small_det_safetensors"
+      },
+      "recognizer": {
+        "model_name": "PP-OCRv6_small_rec",
+        "repository": "PaddlePaddle/PP-OCRv6_small_rec_safetensors"
+      }
+    },
+    {
+      "id": "GlyphWatch.DepthAnythingV2-Small/1.0",
+      "module": "SithAssembly//GlyphWatch",
+      "enabled": true,
+      "purpose": "Relative-depth derivation for explicitly uploaded local image evidence",
+      "runtime": "Transformers with PyTorch",
+      "repository": "depth-anything/Depth-Anything-V2-Small-hf",
+      "revision": "5426e4f0f36572d16453bbda7a8389317b1bef99",
+      "model_dir": ".runtime/models/Depth-Anything-V2-Small-hf",
+      "device": "auto",
+      "output": {
+        "format": "png",
+        "bit_depth": 16,
+        "kind": "relative_depth_derivative"
+      }
+    }
+  ]
+}

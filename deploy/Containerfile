@@ -1,12 +1,29 @@
-FROM python:3.13-slim
+ARG SITH_BASE_IMAGE=python:3.13-slim
+FROM ${SITH_BASE_IMAGE}
 
 WORKDIR /app
-COPY . /app
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV SITH_DATA_DIR=/var/lib/sithassembly/data
+ENV SITH_RUNTIME_DIR=/var/lib/sithassembly/runtime
+ENV SITH_HUGGINGFACE_CACHE_DIR=/var/lib/sithassembly/runtime/huggingface
+ENV SITH_PADDLEX_CACHE_DIR=/var/lib/sithassembly/runtime/paddlex
+ENV HF_HOME=/var/lib/sithassembly/runtime/huggingface
+ENV PADDLE_PDX_CACHE_HOME=/var/lib/sithassembly/runtime/paddlex
+ENV PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True
+
+ARG SITH_ENABLE_GLYPHWATCH=0
+COPY requirements-glyphwatch.txt /tmp/requirements-glyphwatch.txt
+RUN if [ "$SITH_ENABLE_GLYPHWATCH" = "1" ]; then \
+      pip install --no-cache-dir torch==2.9.1+cu130 torchvision==0.24.1+cu130 --index-url https://download.pytorch.org/whl/cu130 && \
+      pip install --no-cache-dir -r /tmp/requirements-glyphwatch.txt; \
+    fi
+
+COPY . /app
+RUN mkdir -p "$SITH_DATA_DIR" "$SITH_RUNTIME_DIR"
 
 EXPOSE 8080
 
-# Compatibility container only. Replace this command with FastAPI/Uvicorn after the API migration.
+# The application remains loopback/private-network only until an authenticated HTTP stack exists.
 CMD ["python", "app.py", "--host", "0.0.0.0", "--port", "8080"]

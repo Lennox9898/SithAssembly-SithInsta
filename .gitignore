@@ -1,0 +1,11 @@
+# Python bytecode and test caches
+__pycache__/
+*.py[cod]
+
+# Local state and downloaded model artifacts
+.runtime/
+data/*.db
+data/logs/
+data/evidence/
+data/vaults/
+data/vault_keys/

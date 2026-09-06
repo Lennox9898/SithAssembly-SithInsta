@@ -6,13 +6,20 @@
     "operator_access": "loopback_or_private_vpn",
     "tls": "reverse_proxy_required_before_public_exposure"
   },
+  "runtime_storage": {
+    "data_dir_env": "SITH_DATA_DIR",
+    "runtime_dir_env": "SITH_RUNTIME_DIR",
+    "huggingface_cache_env": "SITH_HUGGINGFACE_CACHE_DIR",
+    "paddlex_cache_env": "SITH_PADDLEX_CACHE_DIR"
+  },
   "services": {
     "api": {"role": "casework_api", "state": "prepared", "port": 8080},
     "worker": {"role": "analysis_jobs", "state": "prepared", "concurrency": 1},
     "database": {"engine": "PostgreSQL", "state": "migration_not_started", "vector_extension": "pgvector"},
     "object_storage": {"protocol": "s3_compatible", "state": "migration_not_started"},
     "event_bus": {"engine": "NATS JetStream", "state": "prepared", "subjects": ["observation.received", "analysis.review_candidate", "relationship.candidate", "review.required", "export.requested"]},
-    "model_serving": {"state": "opt_in", "allowed_runtimes": ["Ollama", "llama.cpp", "vLLM"]}
+    "model_serving": {"state": "opt_in", "allowed_runtimes": ["Ollama", "llama.cpp", "vLLM"]},
+    "gpu_ocr": {"state": "prepared", "compose_profile": "gpu", "runtime": "PyTorch CUDA + PaddleOCR Transformers"}
   },
   "secret_references": {
     "database_password": "env:SITH_POSTGRES_PASSWORD",

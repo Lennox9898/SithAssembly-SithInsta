@@ -5,12 +5,21 @@ This folder prepares a production-shaped topology locally. It does not start con
 ## Prepared topology
 
 - `api`: compatibility container for the current local application. It is loopback-bound and is not a production HTTP stack yet.
+- `api-gpu`: optional GPU-OCR compatibility container. It is selected with the `gpu` Compose profile and mounts the same case data and model cache as the normal API profile.
 - `worker`: placeholder for future explicit analysis jobs; it must be replaced by a tested queue consumer before activation.
 - `postgres`: target relational database after an audited SQLite migration.
 - `object-storage`: target S3-compatible evidence store after a content-hash reconciliation.
 - `nats`: target durable event bus for agent job subjects.
 
 All infrastructure services are Compose profiles and require explicit image variables. Image tags are deliberately omitted: before use, set a reviewed immutable image digest in `deploy/.env.local`.
+
+## Container Boundary
+
+- Code and non-secret configuration are copied into the image.
+- Case database, evidence, logs, encrypted vaults, and agent reports live under `SITH_DATA_DIR` and are mounted at `/var/lib/sithassembly/data`.
+- Hugging Face, PaddleX, and temporary model files live under `SITH_RUNTIME_DIR` and are mounted at `/var/lib/sithassembly/runtime`.
+- `deploy/.env.example` maps these two paths to the local `data/` and `.runtime/` folders. Keep `deploy/.env.local` out of version control.
+- The `gpu` profile installs the pinned CUDA-enabled PyTorch pair and GlyphWatch runtime at image build time. It needs an NVIDIA-capable Linux Docker host with the NVIDIA Container Toolkit; it is not activated by default.
 
 ## Read-only preflight
 
@@ -20,6 +29,13 @@ python app.py --deployment-preflight
 ```
 
 The preflight only validates local files and reports whether the Docker CLI is found. It does not invoke Docker.
+
+After Docker is installed, render the normal or GPU profile without starting services:
+
+```powershell
+docker compose --env-file deploy/.env.example -f deploy/compose.yml --profile compatibility config
+docker compose --env-file deploy/.env.example -f deploy/compose.yml --profile gpu config
+```
 
 ## Activation order
 

@@ -16,3 +16,5 @@ class RuntimeDoctorTests(unittest.TestCase):
         self.assertIn("acceleration", report)
         self.assertIn("cuda_available", report["acceleration"])
         self.assertEqual(report["configuration"]["state"], "ok")
+        names = {check["name"] for check in report["configuration"]["checks"]}
+        self.assertIn("embedded_model_registry.json", names)

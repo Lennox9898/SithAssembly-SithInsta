@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "notes": "Human-editable allowlist for the private Hugging Face model bucket. Only entries with mirror_enabled set to true may be uploaded.",
+  "destination": {
+    "provider": "huggingface",
+    "bucket": "Lennox9898/sithassembly-model-store",
+    "uri": "hf://buckets/Lennox9898/sithassembly-model-store",
+    "visibility": "private"
+  },
+  "policy": {
+    "sync_mode": "explicit_operator_or_agent_request",
+    "include": "approved model snapshots and model evaluation artifacts only",
+    "exclude": [
+      "case evidence",
+      "account credentials",
+      "local databases",
+      "vault files",
+      "agent reports",
+      "general project files"
+    ],
+    "default_excludes": [".cache/**", ".locks/**", "**/__pycache__/**"]
+  },
+  "models": [
+    {
+      "id": "GlyphWatch.DepthAnythingV2-Small/1.0",
+      "repository": "depth-anything/Depth-Anything-V2-Small-hf",
+      "revision": "5426e4f0f36572d16453bbda7a8389317b1bef99",
+      "license": "Apache-2.0",
+      "local_dir": ".runtime/models/Depth-Anything-V2-Small-hf",
+      "bucket_path": "models/depth-anything-v2-small/5426e4f0f36572d16453bbda7a8389317b1bef99",
+      "mirror_enabled": true,
+      "sync_state": "mirrored",
+      "last_synced_at": "2026-09-05T07:48:51Z"
+    },
+    {
+      "id": "GlyphWatch.PP-OCRv6-Small.Detector/1.1",
+      "repository": "PaddlePaddle/PP-OCRv6_small_det_safetensors",
+      "revision": "eae2ee920a39fb3087637d3dbb58df1896ec1f24",
+      "license": "Apache-2.0",
+      "local_dir": ".runtime/paddlex/official_models/PP-OCRv6_small_det_safetensors",
+      "bucket_path": "models/pp-ocrv6-small-det/eae2ee920a39fb3087637d3dbb58df1896ec1f24",
+      "mirror_enabled": true,
+      "sync_state": "mirrored",
+      "last_synced_at": "2026-09-05T07:48:54Z"
+    },
+    {
+      "id": "GlyphWatch.PP-OCRv6-Small.Recognizer/1.1",
+      "repository": "PaddlePaddle/PP-OCRv6_small_rec_safetensors",
+      "revision": "fe049fb103f57443fe8840c54ed06b702f3c1de5",
+      "license": "Apache-2.0",
+      "local_dir": ".runtime/paddlex/official_models/PP-OCRv6_small_rec_safetensors",
+      "bucket_path": "models/pp-ocrv6-small-rec/fe049fb103f57443fe8840c54ed06b702f3c1de5",
+      "mirror_enabled": true,
+      "sync_state": "mirrored",
+      "last_synced_at": "2026-09-05T07:48:56Z"
+    }
+  ]
+}

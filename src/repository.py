@@ -20,8 +20,11 @@ from src.profile_resolver import ProfileResolver
 from src.relationship_engine import RelationshipEngine
 from src.timeline_engine import TimelineEngine
 from src.graph_viewer import GraphViewer
+from src.job_queue import PersistentJobQueue
+from src.job_worker import LocalJobWorker, WorkerOutcome
 from src.pattern_engine import PatternEngine
 from src.comment_anomaly import CommentAnomalyEngine
+from src.depth_engine import LocalDepthEngine
 from src.ocr_engine import LocalOcrEngine
 from src.evidence_vault import EvidenceVault
 
@@ -42,8 +45,11 @@ class Repository:
         self.timeline_engine = TimelineEngine()
         self.graph_viewer = GraphViewer()
         self.agent_controller = AgentController()
+        self.job_queue = PersistentJobQueue(self.db_path, Path(__file__).resolve().parent.parent / "config" / "agent_registry.json")
+        self.job_worker = LocalJobWorker(self.job_queue)
         self.comment_anomaly = CommentAnomalyEngine()
         self.ocr_engine = LocalOcrEngine()
+        self.depth_engine = LocalDepthEngine()
         self.evidence_vault = EvidenceVault(self.vault_dir, self.db_path.parent / "vault_keys")
         self._ensure_default_case()
         self._backfill_legacy_evidence()
@@ -175,6 +181,13 @@ class Repository:
                    ) ORDER BY id DESC""",
                 (observation_id,),
             ).fetchall()
+            depth_rows = connection.execute(
+                """SELECT id, evidence_id, engine, model_profile, state, artifact_path, artifact_sha256, result_json, created_at
+                   FROM depth_runs WHERE evidence_id IN (
+                       SELECT id FROM evidence WHERE observation_id = ?
+                   ) ORDER BY id DESC""",
+                (observation_id,),
+            ).fetchall()
             tag_rows = connection.execute(tags_query, (observation_id,)).fetchall()
             case_rows = connection.execute(cases_query, (observation_id,)).fetchall()
 
@@ -247,6 +260,7 @@ class Repository:
                 }
                 for run in ocr_rows
             ],
+            "depth_runs": [{**dict(run), "result": json.loads(run["result_json"])} for run in depth_rows],
             "tags": [dict(tag) for tag in tag_rows],
             "cases": [dict(case) for case in case_rows],
             "draft": draft,
@@ -840,14 +854,14 @@ class Repository:
             self._require_case(connection, case_id)
             cursor = connection.execute(
                 """INSERT INTO evidence (case_id, observation_id, kind, label, file_path, captured_at, annotation, created_at)
-                   VALUES (?, ?, 'local_image', ?, ?, ?, 'Explicit local image evidence; OCR is opt-in.', ?)""",
+                   VALUES (?, ?, 'local_image', ?, ?, ?, 'Explicit local image evidence; OCR and depth derivation are opt-in.', ?)""",
                 (case_id, observation_id, label, str(relative_path), utc_timestamp(), utc_timestamp()),
             )
             connection.execute("UPDATE cases SET updated_at = ? WHERE id = ?", (utc_timestamp(), case_id))
         return {"id": int(cursor.lastrowid), "label": label, "file_path": str(relative_path), "kind": "local_image"}
 
     def get_model_status(self) -> list[dict[str, Any]]:
-        return [self.comment_anomaly.status(), self.ocr_engine.status()]
+        return [self.comment_anomaly.status(), self.ocr_engine.status(), self.depth_engine.status()]
 
     def get_comment_anomalies(self, case_id: int) -> dict[str, Any]:
         if self.get_case(case_id) is None:
@@ -898,6 +912,54 @@ class Repository:
             )
         return {"id": int(cursor.lastrowid), "evidence_id": evidence_id, **result}
 
+    def run_depth(self, case_id: int, evidence_id: int, confirmed: bool = False) -> dict[str, Any]:
+        if not confirmed:
+            return {
+                "state": "confirmation_required",
+                "message": "Relative-depth analysis creates a local derived image. Confirmation is required.",
+            }
+        with open_connection(self.db_path) as connection:
+            evidence = connection.execute(
+                "SELECT id, file_path FROM evidence WHERE id = ? AND case_id = ? AND kind = 'local_image'",
+                (evidence_id, case_id),
+            ).fetchone()
+            if evidence is None:
+                raise ValueError("local image evidence not found in case")
+        image_path = self._resolve_evidence_path(str(evidence["file_path"] or ""))
+        if image_path is None or not image_path.exists():
+            raise ValueError("local image evidence file is unavailable")
+
+        output_relative_path = Path("evidence") / f"case-{case_id}" / "derivatives" / f"evidence-{evidence_id}-depth-anything-v2-small.png"
+        output_path = self.db_path.parent / output_relative_path
+        result = self.depth_engine.derive(image_path, output_path)
+        result["artifact_path"] = str(output_relative_path) if result["state"] == "completed" else None
+        with open_connection(self.db_path) as connection:
+            cursor = connection.execute(
+                """INSERT INTO depth_runs (case_id, evidence_id, engine, model_profile, state, artifact_path, artifact_sha256, result_json, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    case_id,
+                    evidence_id,
+                    result["engine"],
+                    result["profile"],
+                    result["state"],
+                    result.get("artifact_path"),
+                    result.get("artifact_sha256"),
+                    json.dumps(result, ensure_ascii=False),
+                    utc_timestamp(),
+                ),
+            )
+            self._record_job(
+                connection,
+                case_id,
+                module_name("depth_engine"),
+                result["message"],
+                result["state"],
+                None,
+                None,
+            )
+        return {"id": int(cursor.lastrowid), "evidence_id": evidence_id, **result}
+
     def get_vault_status(self) -> dict[str, str]:
         return self.evidence_vault.status()
 
@@ -910,11 +972,20 @@ class Repository:
                 "SELECT id, file_path FROM evidence WHERE case_id = ? AND TRIM(COALESCE(file_path, '')) <> ''",
                 (case_id,),
             ).fetchall()
+            depth_rows = connection.execute(
+                """SELECT id, artifact_path FROM depth_runs
+                   WHERE case_id = ? AND state = 'completed' AND TRIM(COALESCE(artifact_path, '')) <> ''""",
+                (case_id,),
+            ).fetchall()
         evidence_files = []
         for row in rows:
             path = self._resolve_evidence_path(str(row["file_path"]))
             if path is not None:
                 evidence_files.append({"path": path, "archive_name": f"evidence/{row['id']}-{path.name}"})
+        for row in depth_rows:
+            path = self._resolve_evidence_path(str(row["artifact_path"]))
+            if path is not None:
+                evidence_files.append({"path": path, "archive_name": f"derivatives/depth-run-{row['id']}-{path.name}"})
         artifact = self.evidence_vault.create(case_id, report, evidence_files, passphrase, operator)
         relative_path = artifact["path"].relative_to(self.db_path.parent)
         with open_connection(self.db_path) as connection:
@@ -994,6 +1065,80 @@ class Repository:
                 (case_id,),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def get_job_queue_status(self) -> dict[str, Any]:
+        return self.job_queue.snapshot()
+
+    def queue_agent_job(self, case_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+        topic = payload.get("topic")
+        input_payload = payload.get("input", {})
+        configuration_version = payload.get("configuration_version")
+        max_attempts = payload.get("max_attempts", 3)
+        result = self.job_queue.enqueue(case_id, topic, input_payload, configuration_version, max_attempts)
+        with open_connection(self.db_path) as connection:
+            created_count = 0
+            for job in result["jobs"]:
+                if job["created"]:
+                    created_count += 1
+                    self._record_job(
+                        connection,
+                        case_id,
+                        module_name("job_queue"),
+                        f"Queued {job['topic']} for {job['agent_id']}.",
+                        "queued",
+                        None,
+                        None,
+                    )
+            if created_count:
+                connection.execute("UPDATE cases SET updated_at = ? WHERE id = ?", (utc_timestamp(), case_id))
+        return result
+
+    def list_agent_jobs(self, case_id: int, state: str | None = None) -> list[dict[str, Any]]:
+        return self.job_queue.list_jobs(case_id, state)
+
+    def get_agent_job(self, job_id: int) -> dict[str, Any] | None:
+        return self.job_queue.get_job(job_id)
+
+    def get_agent_job_events(self, job_id: int) -> list[dict[str, Any]]:
+        return self.job_queue.list_events(job_id)
+
+    def transition_agent_job(self, job_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+        result = self.job_queue.transition(job_id, payload.get("action"), payload)
+        processing_state = "review_needed" if result["state"] == "needs_review" else result["state"]
+        with open_connection(self.db_path) as connection:
+            self._record_job(
+                connection,
+                result["case_id"],
+                module_name("job_queue"),
+                f"{result['topic']} for {result['agent_id']} is {result['state']}.",
+                processing_state,
+                None,
+                None,
+            )
+            connection.execute("UPDATE cases SET updated_at = ? WHERE id = ?", (utc_timestamp(), result["case_id"]))
+        return result
+
+    def execute_agent_job(self, job_id: int) -> dict[str, Any]:
+        result = self.job_worker.execute(
+            job_id,
+            {
+                ("evidence.ocr_requested", "glyphwatch-ocr"): self._execute_ocr_job,
+                ("evidence.depth_requested", "glyphwatch-depth"): self._execute_depth_job,
+            },
+        )
+        processing_state = "review_needed" if result["state"] == "needs_review" else result["state"]
+        with open_connection(self.db_path) as connection:
+            self._record_job(
+                connection,
+                result["case_id"],
+                module_name("job_worker"),
+                f"Executed {result['topic']} for {result['agent_id']}: {result['state']}.",
+                processing_state,
+                None,
+                None,
+            )
+            connection.execute("UPDATE cases SET updated_at = ? WHERE id = ?", (utc_timestamp(), result["case_id"]))
+        return result
 
     def get_profile_detail(self, case_id: int, handle: str) -> dict[str, Any] | None:
         normalized = self.profile_resolver.normalize_handle(handle)
@@ -1340,6 +1485,9 @@ class Repository:
         timeline = self.get_case_timeline(case_id)
         graph = self.get_case_graph(case_id)
         profiles = self.get_case_profiles(case_id)
+        agent_jobs = self.list_agent_jobs(case_id)
+        for job in agent_jobs:
+            job["events"] = self.get_agent_job_events(job["id"])
         with open_connection(self.db_path) as connection:
             evidence = [dict(row) for row in connection.execute(
                 "SELECT id, observation_id, kind, label, url, file_path, captured_at, annotation FROM evidence WHERE case_id = ? ORDER BY captured_at DESC, id DESC",
@@ -1363,6 +1511,14 @@ class Repository:
                     (case_id,),
                 ).fetchall()
             ]
+            depth_runs = [
+                {**dict(row), "result": json.loads(row["result_json"])}
+                for row in connection.execute(
+                    """SELECT id, evidence_id, engine, model_profile, state, artifact_path, artifact_sha256, result_json, created_at
+                       FROM depth_runs WHERE case_id = ? ORDER BY id DESC""",
+                    (case_id,),
+                ).fetchall()
+            ]
         return {
             "export_version": "1.0",
             "generated_at": utc_timestamp(),
@@ -1375,8 +1531,35 @@ class Repository:
             "timeline": timeline,
             "evidence": evidence,
             "ocr_runs": ocr_runs,
+            "depth_runs": depth_runs,
+            "agent_jobs": agent_jobs,
             "notes": notes,
         }
+
+    def _execute_ocr_job(self, job: dict[str, Any]) -> WorkerOutcome:
+        evidence_id = self._job_evidence_id(job)
+        input_payload = job["input"]
+        confirmed = bool(input_payload.get("confirm_model_download"))
+        language = self._clean_text(input_payload.get("language")) or "en"
+        result = self.run_ocr(job["case_id"], evidence_id, confirmed=confirmed, language=language)
+        if result["state"] == "completed":
+            return WorkerOutcome("completed", result, "Explicit local OCR job completed.")
+        return WorkerOutcome("needs_review", result, str(result.get("message", "OCR requires review.")))
+
+    def _execute_depth_job(self, job: dict[str, Any]) -> WorkerOutcome:
+        evidence_id = self._job_evidence_id(job)
+        confirmed = bool(job["input"].get("confirm_depth_analysis"))
+        result = self.run_depth(job["case_id"], evidence_id, confirmed=confirmed)
+        if result["state"] == "completed":
+            return WorkerOutcome("completed", result, "Explicit local depth job completed.")
+        return WorkerOutcome("needs_review", result, str(result.get("message", "Depth analysis requires review.")))
+
+    @staticmethod
+    def _job_evidence_id(job: dict[str, Any]) -> int:
+        evidence_id = job["input"].get("evidence_id")
+        if not isinstance(evidence_id, int) or isinstance(evidence_id, bool) or evidence_id < 1:
+            raise ValueError("job input requires a positive evidence_id")
+        return evidence_id
 
     @staticmethod
     def _image_suffix(content: bytes) -> str | None:

@@ -26,12 +26,15 @@ MODULES = (
     AssemblyModule("command_engine", "SithAssembly//CommandDeck", "CommandDeck.Allowlist/1.0", "Allowlisted local command execution", "local only"),
     AssemblyModule("agent_controller", "SithAssembly//AssemblyCore", "AssemblyCore.Telemetry/1.0", "Visible processing orchestration", "human-in-the-loop"),
     AssemblyModule("agent_coordination", "SithAssembly//Conclave", "Conclave.Protocol/1.0", "Capability registry and topic routing", "local deterministic"),
+    AssemblyModule("job_queue", "SithAssembly//Conclave", "Conclave.JobLedger/1.0", "Persistent local job state and event envelopes", "local deterministic"),
+    AssemblyModule("job_worker", "SithAssembly//Conclave", "Conclave.LocalWorker/1.0", "Explicit local handlers for queued registry jobs", "operator initiated"),
     AssemblyModule("clawdbot_adapter", "SithAssembly//ClawBridge", "ClawBridge.OpenClaw/0.1", "Prepared Clawdbot/OpenClaw gateway bridge", "disabled by default"),
     AssemblyModule("local_llm", "SithAssembly//MindForge", "MindForge.LocalLLM/0.1", "Local LLM provider and response bridge", "opt-in loopback"),
     AssemblyModule("runtime_doctor", "SithAssembly//ForgeProbe", "ForgeProbe.Runtime/0.1", "Read-only configuration and compute diagnostics", "local inspection"),
     AssemblyModule("deployment_preflight", "SithAssembly//Citadel", "Citadel.DeployPrep/0.1", "Read-only production topology preparation", "activation gated"),
     AssemblyModule("comment_anomaly", "SithAssembly//SignalForge", "SignalForge.ECOD/1.0", "Comment feature outlier review candidates", "local optional model"),
-    AssemblyModule("ocr_engine", "SithAssembly//GlyphWatch", "GlyphWatch.PP-OCRv6/1.0", "OCR for explicit local image evidence", "local optional model"),
+    AssemblyModule("ocr_engine", "SithAssembly//GlyphWatch", "GlyphWatch.PP-OCRv6-Small/1.1", "OCR for explicit local image evidence", "local optional model"),
+    AssemblyModule("depth_engine", "SithAssembly//GlyphWatch", "GlyphWatch.DepthAnythingV2-Small/1.0", "Relative-depth derivatives for explicit local image evidence", "local optional model"),
     AssemblyModule("evidence_vault", "SithAssembly//EvidenceVault", "EvidenceVault.SIF/1.0", "Signed and encrypted local evidence packages", "local opt-in"),
 )
 

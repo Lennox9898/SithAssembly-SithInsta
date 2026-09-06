@@ -13,6 +13,7 @@ from src.agent_coordination import AgentCoordinator, AgentReportJournal
 from src.case_manager import CaseManager
 from src.clawdbot_adapter import ClawdbotAdapter
 from src.command_engine import CommandEngine
+from src.database import DATA_DIR
 from src.module_runtime import ModuleRuntime
 from src.local_llm import LocalLlmBridge, LocalModelRegistry
 from src.report_generator import ReportGenerator
@@ -36,7 +37,7 @@ class SignalDeskHandler(BaseHTTPRequestHandler):
     runtime_logger: RuntimeLogger | None = None
     dev_mode = False
     agent_coordinator = AgentCoordinator(ROOT_DIR / "config" / "agent_registry.json")
-    agent_journal = AgentReportJournal(ROOT_DIR / "data" / "agent_reports.jsonl")
+    agent_journal = AgentReportJournal(DATA_DIR / "agent_reports.jsonl")
     clawdbot_adapter = ClawdbotAdapter(ROOT_DIR / "config" / "clawdbot.local.json")
     local_model_registry = LocalModelRegistry(ROOT_DIR / "config" / "local_model_registry.json")
     local_llm_bridge = LocalLlmBridge(local_model_registry)
@@ -69,6 +70,9 @@ class SignalDeskHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/agents":
             self._send_json(self.agent_coordinator.snapshot())
+            return
+        if path == "/api/job-queue":
+            self._send_json(self.repository.get_job_queue_status())
             return
         if path == "/api/clawdbot":
             self._send_json(self.clawdbot_adapter.status())
@@ -145,6 +149,26 @@ class SignalDeskHandler(BaseHTTPRequestHandler):
         case_processing_match = re.fullmatch(r"/api/cases/(\d+)/processing", path)
         if case_processing_match:
             self._send_json(self.repository.list_processing(int(case_processing_match.group(1))))
+            return
+
+        case_jobs_match = re.fullmatch(r"/api/cases/(\d+)/jobs", path)
+        if case_jobs_match:
+            state = query.get("state")
+            self._send_json(self.repository.list_agent_jobs(int(case_jobs_match.group(1)), state))
+            return
+
+        job_match = re.fullmatch(r"/api/jobs/(\d+)", path)
+        if job_match:
+            job = self.repository.get_agent_job(int(job_match.group(1)))
+            if job is None:
+                self._send_json({"error": "not_found"}, status=HTTPStatus.NOT_FOUND)
+                return
+            self._send_json(job)
+            return
+
+        job_events_match = re.fullmatch(r"/api/jobs/(\d+)/events", path)
+        if job_events_match:
+            self._send_json(self.repository.get_agent_job_events(int(job_events_match.group(1))))
             return
 
         case_findings_match = re.fullmatch(r"/api/cases/(\d+)/findings", path)
@@ -269,6 +293,27 @@ class SignalDeskHandler(BaseHTTPRequestHandler):
                 self._send_json(created, status=HTTPStatus.CREATED)
                 return
 
+            case_jobs_match = re.fullmatch(r"/api/cases/(\d+)/jobs", path)
+            if case_jobs_match:
+                result = self.repository.queue_agent_job(int(case_jobs_match.group(1)), payload)
+                self._log_event("agent_jobs_queued", case_id=case_jobs_match.group(1), topic=result["topic"], count=len(result["jobs"]))
+                self._send_json(result, status=HTTPStatus.CREATED)
+                return
+
+            job_transition_match = re.fullmatch(r"/api/jobs/(\d+)/transition", path)
+            if job_transition_match:
+                result = self.repository.transition_agent_job(int(job_transition_match.group(1)), payload)
+                self._log_event("agent_job_transition", job_id=result["id"], state=result["state"], action=payload.get("action"))
+                self._send_json(result)
+                return
+
+            job_execute_match = re.fullmatch(r"/api/jobs/(\d+)/execute", path)
+            if job_execute_match:
+                result = self.repository.execute_agent_job(int(job_execute_match.group(1)))
+                self._log_event("agent_job_executed", job_id=result["id"], state=result["state"], topic=result["topic"])
+                self._send_json(result)
+                return
+
             case_notes_match = re.fullmatch(r"/api/cases/(\d+)/notes", path)
             if case_notes_match:
                 created = self.repository.add_note(int(case_notes_match.group(1)), payload)
@@ -300,6 +345,16 @@ class SignalDeskHandler(BaseHTTPRequestHandler):
                     int(case_ocr_match.group(2)),
                     bool(payload.get("confirm_model_download")),
                     str(payload.get("language", "en")),
+                )
+                self._send_json(result, status=HTTPStatus.CREATED)
+                return
+
+            case_depth_match = re.fullmatch(r"/api/cases/(\d+)/evidence/(\d+)/depth", path)
+            if case_depth_match:
+                result = self.repository.run_depth(
+                    int(case_depth_match.group(1)),
+                    int(case_depth_match.group(2)),
+                    bool(payload.get("confirm_depth_analysis")),
                 )
                 self._send_json(result, status=HTTPStatus.CREATED)
                 return
@@ -417,7 +472,7 @@ class SignalDeskHandler(BaseHTTPRequestHandler):
 
 
 def run(host: str = "127.0.0.1", port: int = 8080, dev_mode: bool = False, compute_mode: str = "auto") -> None:
-    runtime_logger = RuntimeLogger(ROOT_DIR / "data" / "logs", dev_mode=dev_mode)
+    runtime_logger = RuntimeLogger(DATA_DIR / "logs", dev_mode=dev_mode)
     runtime = ModuleRuntime(ROOT_DIR / "config" / "module_registry.json", runtime_logger)
     try:
         runtime.startup()

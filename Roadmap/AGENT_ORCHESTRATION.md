@@ -35,7 +35,7 @@ Die aktuelle, maschinenlesbare Quelle ist [`config/agent_registry.json`](../conf
 
 ### Stufe A: Ohne Agentenframework
 
-- Neue Tabellen `processing_jobs`, `processing_events`, `agent_runs` und `review_decisions` anlegen.
+- `agent_jobs`, `agent_job_events`, and the operator-initiated `job_worker` are implemented as the local job ledger. The existing `processing_jobs` table remains the human-readable processing timeline.
 - Ein lokaler Worker nimmt nur freigegebene Topics aus der Registry an.
 - Jeder Job kann `queued`, `running`, `completed`, `failed`, `cancelled` oder `needs_review` sein.
 - Idempotenzschluessel: `case_id + topic + input_hash + configuration_version`.

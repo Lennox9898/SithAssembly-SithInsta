@@ -12,6 +12,8 @@ SithAssembly will be the effort to Connect AI with ASM and even Bytecode.
 
 - `src/report_generator.py`: JSON and local PDF reports.
 - `src/agent_controller.py`: visible processing stages.
+- `src/job_queue.py`: persistent, registry-routed local job ledger with idempotency and event envelopes.
+- `src/job_worker.py`: explicit local worker for registered OCR and depth jobs.
 - `src/command_engine.py`: allowlisted slash commands for local cases.
 - `src/case_importer.py`: validation for manual and officially exported JSON data.
 - `src/evidence_integrity.py`: local content and context fingerprints.
@@ -39,6 +41,8 @@ The planned Qwen output separates visible evidence-bound facts from a readable m
 Local agent models can be connected through Ollama, llama.cpp, or vLLM. The editable provider registry, local LLM API contract, and startup sequence are in `docs/LOCAL_MODELS.md`.
 
 `python app.py --check-config` validates all local registries without starting a server. `python app.py --print-capabilities` and `python SithAssembly.Runtime.py doctor` report whether CUDA and optional accelerators such as xFormers or FlashAttention are present. These diagnostics install and enable nothing automatically.
+
+The Conclave job ledger exposes persistent local job state and event trails for approved registry topics. It does not execute work on its own; see `docs/JOB_QUEUE.md` for the lifecycle and local API.
 
 ## Server Preparation
 
