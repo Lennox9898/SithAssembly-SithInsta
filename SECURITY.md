@@ -17,6 +17,25 @@ The compatibility HTTP server rejects unlisted Host headers, chunked request bod
 - The private Hugging Face model bucket contains approved model artifacts only, never case data or credentials.
 - Back up `data/vault_keys/` separately from encrypted vault packages and protect it with host encryption and access controls. Vault verification trusts this installation key; replacing or losing it changes or removes that trust anchor.
 
+## Automated Vulnerability Monitoring
+
+GitHub Dependabot monitors the tracked Python and GitHub Actions dependencies.
+The `Weekly CVE audit` workflow runs every Monday and can also be started
+manually. It collects open Dependabot alerts, audits every
+`requirements-*.txt` file with the pinned `pip-audit` tool, and uses Trivy
+to scan repository dependencies, configuration, and committed content.
+
+Each run writes a GitHub Actions summary, retains JSON/log/SARIF reports as a
+90-day workflow artifact, and uploads Trivy SARIF to GitHub code scanning when
+that service is available. A finding fails the audit job for visibility but
+does not merge, patch, open an issue, or change application data automatically.
+
+Container services supplied only through environment variables cannot be
+resolved by Dependabot. Record and pin deployed image versions or digests in
+the deployment inventory before relying on the weekly audit for those services.
+Model behavior and model-card claims are outside CVE scanning and require their
+own review.
+
 ## Reporting a Vulnerability
 
 Do not open a public issue with exploit details or sensitive data. Contact the repository owner privately with a concise description, affected version or commit, reproduction conditions, and suggested impact. Allow time for triage before public disclosure.

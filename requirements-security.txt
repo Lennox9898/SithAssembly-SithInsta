@@ -1,0 +1,2 @@
+# Tooling for the reproducible dependency audit; not required by the server.
+pip-audit==2.10.1

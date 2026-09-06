@@ -22,7 +22,27 @@ updates:
           - "minor"
           - "patch"
 
-# Add a github-actions entry when workflow files are introduced.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:30"
+      timezone: "Europe/Berlin"
+    open-pull-requests-limit: 5
+    rebase-strategy: "auto"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    groups:
+      actions-minor-and-patch:
+        applies-to: "version-updates"
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
 # Docker updates are intentionally omitted for now: deploy/Containerfile uses
 # an ARG-based base image and deploy/compose.yml receives image references from
 # environment variables, so Dependabot cannot produce reliable image patches.

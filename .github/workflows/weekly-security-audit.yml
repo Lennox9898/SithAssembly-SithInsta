@@ -1,0 +1,151 @@
+name: Weekly CVE audit
+
+on:
+  schedule:
+    # GitHub schedules use UTC. This runs Monday morning before the Codex report.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+  vulnerability-alerts: read
+
+concurrency:
+  group: weekly-cve-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    name: Dependencies, configuration, and repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: |
+            requirements-*.txt
+
+      - name: Prepare report directory
+        run: mkdir -p security-reports
+
+      - name: Collect open Dependabot alerts
+        id: dependabot
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          report="security-reports/dependabot-alerts.json"
+          if ! gh api "repos/${GITHUB_REPOSITORY}/dependabot/alerts?state=open&per_page=100" > "${report}"; then
+            printf '{"error":"Dependabot alerts could not be read"}\n' > "${report}"
+            echo "open_count=unknown" >> "${GITHUB_OUTPUT}"
+            exit 1
+          fi
+
+          count="$(jq 'length' "${report}")"
+          echo "open_count=${count}" >> "${GITHUB_OUTPUT}"
+          if [[ "${count}" -gt 0 ]]; then
+            echo "::warning title=Open Dependabot alerts::${count} open alert(s) require review."
+            exit 1
+          fi
+
+      - name: Install pinned audit tooling
+        run: python -m pip install --disable-pip-version-check --requirement requirements-security.txt
+
+      - name: Audit Python requirement files
+        id: pip_audit
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -uo pipefail
+          status=0
+          shopt -s nullglob
+          manifests=(requirements-*.txt)
+          if [[ "${#manifests[@]}" -eq 0 ]]; then
+            echo "No Python requirement files found." | tee security-reports/pip-audit.log
+            exit 1
+          fi
+
+          for manifest in "${manifests[@]}"; do
+            stem="${manifest%.txt}"
+            echo "Auditing ${manifest}" | tee -a security-reports/pip-audit.log
+            if ! python -m pip_audit \
+              --requirement "${manifest}" \
+              --format json \
+              --output "security-reports/pip-audit-${stem}.json" \
+              2> "security-reports/pip-audit-${stem}.stderr.log"; then
+              status=1
+            fi
+          done
+          exit "${status}"
+
+      - name: Scan repository with Trivy
+        id: trivy
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          scanners: "vuln,misconfig,secret"
+          severity: "HIGH,CRITICAL"
+          ignore-unfixed: false
+          format: "sarif"
+          output: "security-reports/trivy.sarif"
+          exit-code: "1"
+
+      - name: Upload Trivy results to code scanning
+        if: ${{ always() && hashFiles('security-reports/trivy.sarif') != '' }}
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
+        with:
+          sarif_file: "security-reports/trivy.sarif"
+          category: "weekly-trivy"
+
+      - name: Write run summary
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          {
+            echo "## SithAssembly weekly CVE audit"
+            echo
+            echo "| Check | Result |"
+            echo "| --- | --- |"
+            echo "| Open Dependabot alerts | ${{ steps.dependabot.outputs.open_count || 'unknown' }} |"
+            echo "| Python requirement audit | ${{ steps.pip_audit.outcome }} |"
+            echo "| Trivy repository scan | ${{ steps.trivy.outcome }} |"
+            echo
+            echo "Detailed JSON, logs, and SARIF are attached as the security-audit artifact."
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload audit reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: "security-audit-${{ github.run_number }}"
+          path: "security-reports/"
+          if-no-files-found: "error"
+          retention-days: 90
+
+      - name: Enforce audit result
+        if: ${{ always() }}
+        env:
+          DEPENDABOT_RESULT: ${{ steps.dependabot.outcome }}
+          PIP_AUDIT_RESULT: ${{ steps.pip_audit.outcome }}
+          TRIVY_RESULT: ${{ steps.trivy.outcome }}
+        shell: bash
+        run: |
+          if [[ "${DEPENDABOT_RESULT}" != "success" ||
+                "${PIP_AUDIT_RESULT}" != "success" ||
+                "${TRIVY_RESULT}" != "success" ]]; then
+            echo "One or more security checks require review."
+            exit 1
+          fi
