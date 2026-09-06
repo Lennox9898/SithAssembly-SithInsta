@@ -47,6 +47,24 @@ class ImportAndPatternTests(unittest.TestCase):
             if db_path.exists():
                 db_path.unlink()
 
+    def test_import_rejects_unsafe_urls_without_aborting_valid_items(self) -> None:
+        db_path = Path("data") / f"test_import_urls_{uuid4().hex}.db"
+        try:
+            repo = Repository(db_path)
+            case = repo.create_case({"title": "URL import validation"})
+            result = repo.import_case_payload(
+                case["id"],
+                {"items": [
+                    {"handle": "@valid", "body": "Captured text", "source_url": "https://example.org/post"},
+                    {"handle": "@unsafe", "body": "Captured text", "source_url": "javascript:alert(1)"},
+                ]},
+            )
+            self.assertEqual(result["accepted_count"], 1)
+            self.assertEqual(result["rejected_count"], 1)
+        finally:
+            if db_path.exists():
+                db_path.unlink()
+
 
 if __name__ == "__main__":
     unittest.main()

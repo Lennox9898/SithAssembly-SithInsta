@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlparse
 
 
 @dataclass(frozen=True)
@@ -39,5 +40,26 @@ class CaseImporter:
             if not handle or not body:
                 rejected.append({"index": index, "reason": "handle and body are required"})
                 continue
+            if not self._has_safe_urls(item):
+                rejected.append({"index": index, "reason": "URLs must use http or https without embedded credentials"})
+                continue
             accepted.append(dict(item))
         return ImportPreview(accepted=accepted, rejected=rejected)
+
+    @staticmethod
+    def _has_safe_urls(item: dict[str, Any]) -> bool:
+        candidates: list[object] = [item.get("source_url")]
+        sources = item.get("sources", [])
+        if isinstance(sources, list):
+            candidates.extend(source.get("url") for source in sources if isinstance(source, dict))
+        return all(CaseImporter._is_safe_optional_url(value) for value in candidates)
+
+    @staticmethod
+    def _is_safe_optional_url(value: object) -> bool:
+        if value is None or not str(value).strip():
+            return True
+        candidate = str(value).strip()
+        if len(candidate) > 2_048 or any(character.isspace() for character in candidate):
+            return False
+        parsed = urlparse(candidate)
+        return parsed.scheme in {"http", "https"} and bool(parsed.hostname) and not parsed.username and not parsed.password

@@ -10,6 +10,9 @@ from urllib.request import Request, urlopen
 
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 MESSAGE_ROLES = {"system", "user", "assistant"}
+MAX_LLM_REQUEST_BYTES = 2 * 1024 * 1024
+MAX_LLM_RESPONSE_BYTES = 4 * 1024 * 1024
+MAX_LLM_RESPONSE_TEXT_CHARS = 256 * 1024
 
 
 class LocalModelRegistry:
@@ -17,6 +20,7 @@ class LocalModelRegistry:
         self.registry_path = registry_path
 
     def snapshot(self) -> dict[str, Any]:
+        self.validate()
         registry = self._read()
         return {
             "registry": str(self.registry_path),
@@ -83,8 +87,27 @@ class LocalModelRegistry:
         if provider.get("protocol") not in {"ollama_chat", "openai_chat_completions"}:
             raise ValueError("local LLM provider has an unsupported protocol")
         parsed = urlparse(str(provider.get("base_url", "")))
-        if parsed.scheme != "http" or parsed.hostname not in LOOPBACK_HOSTS:
+        if (
+            parsed.scheme != "http"
+            or parsed.hostname not in LOOPBACK_HOSTS
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+        ):
             raise ValueError("local LLM provider must use an HTTP loopback URL")
+        try:
+            port = parsed.port
+        except ValueError as error:
+            raise ValueError("local LLM provider has an invalid port") from error
+        if port is not None and not 1 <= port <= 65535:
+            raise ValueError("local LLM provider has an invalid port")
+        timeout = provider.get("timeout_seconds", 120)
+        if not isinstance(timeout, int) or isinstance(timeout, bool) or not 1 <= timeout <= 120:
+            raise ValueError("local LLM provider timeout_seconds must be an integer from 1 to 120")
+        maximum = provider.get("max_output_tokens", 2048)
+        if not isinstance(maximum, int) or isinstance(maximum, bool) or not 1 <= maximum <= 8192:
+            raise ValueError("local LLM provider max_output_tokens must be an integer from 1 to 8192")
 
 
 class LocalLlmBridge:
@@ -139,11 +162,17 @@ class LocalLlmBridge:
             endpoint = f"{str(provider['base_url']).rstrip('/')}/chat/completions"
             body = {"model": runtime_model, "messages": messages, "temperature": temperature, "max_tokens": max_output_tokens}
 
-        call = Request(endpoint, data=json.dumps(body).encode("utf-8"), headers={"Content-Type": "application/json"}, method="POST")
+        encoded_body = json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        if len(encoded_body) > MAX_LLM_REQUEST_BYTES:
+            raise ValueError("local LLM request is limited to 2 MB")
+        call = Request(endpoint, data=encoded_body, headers={"Content-Type": "application/json"}, method="POST")
         try:
             with urlopen(call, timeout=int(provider.get("timeout_seconds", 120))) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-        except (URLError, OSError, json.JSONDecodeError) as error:
+                raw_response = response.read(MAX_LLM_RESPONSE_BYTES + 1)
+            if len(raw_response) > MAX_LLM_RESPONSE_BYTES:
+                raise ValueError("local LLM response is limited to 4 MB")
+            payload = json.loads(raw_response.decode("utf-8"))
+        except (URLError, OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
             raise ValueError(f"local LLM request failed: {type(error).__name__}") from error
         if not isinstance(payload, dict):
             raise ValueError("local LLM response must be a JSON object")
@@ -164,6 +193,12 @@ class LocalLlmBridge:
             usage = payload.get("usage", {})
         if not isinstance(content, str):
             raise ValueError("local LLM response contains no readable content")
+        if len(content) > MAX_LLM_RESPONSE_TEXT_CHARS:
+            raise ValueError("local LLM response content is too large")
+        if not isinstance(thinking, str):
+            thinking = ""
+        elif len(thinking) > MAX_LLM_RESPONSE_TEXT_CHARS:
+            thinking = ""
         return {
             "provider_id": provider["id"],
             "runtime": provider["runtime"],
@@ -171,6 +206,6 @@ class LocalLlmBridge:
             "runtime_model": runtime_model,
             "response_contract": profile.get("response_contract", "plain_text"),
             "content": content,
-            "thinking": thinking if isinstance(thinking, str) else "",
+            "thinking": thinking,
             "usage": usage,
         }

@@ -21,9 +21,14 @@ RUN if [ "$SITH_ENABLE_GLYPHWATCH" = "1" ]; then \
     fi
 
 COPY . /app
-RUN mkdir -p "$SITH_DATA_DIR" "$SITH_RUNTIME_DIR"
+RUN groupadd --system --gid 10001 sithassembly && \
+    useradd --system --uid 10001 --gid sithassembly --home-dir /app --shell /usr/sbin/nologin sithassembly && \
+    mkdir -p "$SITH_DATA_DIR" "$SITH_RUNTIME_DIR" && \
+    chown -R sithassembly:sithassembly /app "$SITH_DATA_DIR" "$SITH_RUNTIME_DIR"
+
+USER sithassembly
 
 EXPOSE 8080
 
-# The application remains loopback/private-network only until an authenticated HTTP stack exists.
-CMD ["python", "app.py", "--host", "0.0.0.0", "--port", "8080"]
+# Compose exposes this only on loopback by default. Network binding also requires SITH_API_TOKEN.
+CMD ["python", "app.py", "--host", "0.0.0.0", "--port", "8080", "--allow-network"]

@@ -8,17 +8,36 @@ from pathlib import Path
 from typing import Any
 
 
-SENSITIVE_KEYS = {"passphrase", "password", "secret", "token", "content_base64", "image_base64"}
+SENSITIVE_KEY_MARKERS = {
+    "authorization",
+    "cookie",
+    "credential",
+    "passphrase",
+    "password",
+    "private_key",
+    "secret",
+    "session",
+    "token",
+}
+SENSITIVE_KEYS = {"content_base64", "image_base64"}
+MAX_LOG_VALUE_CHARS = 4096
+
+
+def _is_sensitive_key(value: object) -> bool:
+    normalized = str(value).strip().lower().replace("-", "_")
+    return normalized in SENSITIVE_KEYS or any(marker in normalized for marker in SENSITIVE_KEY_MARKERS)
 
 
 def _safe_value(value: Any) -> Any:
     if isinstance(value, dict):
-        return {str(key): "[redacted]" if str(key).lower() in SENSITIVE_KEYS else _safe_value(item) for key, item in value.items()}
+        return {str(key): "[redacted]" if _is_sensitive_key(key) else _safe_value(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
         return [_safe_value(item) for item in value]
     if isinstance(value, Path):
         return str(value)
-    if isinstance(value, (str, int, float, bool)) or value is None:
+    if isinstance(value, str):
+        return value[:MAX_LOG_VALUE_CHARS]
+    if isinstance(value, (int, float, bool)) or value is None:
         return value
     return str(value)
 

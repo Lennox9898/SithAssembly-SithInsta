@@ -24,7 +24,12 @@ python app.py --check-config
 python app.py --print-capabilities
 ```
 
-Only set `--host` to a non-loopback address after reviewing local network access.
+The server refuses non-loopback binds unless `--allow-network` is explicit and `SITH_API_TOKEN` contains at least 24 characters. In that mode, every `/api/*` endpoint except `/api/health` requires `Authorization: Bearer <SITH_API_TOKEN>` and should still sit behind private VPN or authenticated TLS reverse proxy.
+
+```powershell
+$env:SITH_API_TOKEN = "replace-with-a-random-value-of-at-least-24-characters"
+python app.py --host 0.0.0.0 --allow-network
+```
 
 `--compute-mode auto` is the default and only declares the intended compute policy in runtime status. `--compute-mode cpu` keeps the policy CPU-oriented. `--compute-mode cuda` refuses to start unless local PyTorch reports CUDA as available. None of these flags installs PyTorch, xFormers, FlashAttention, model weights, or starts a model runtime.
 
@@ -42,7 +47,7 @@ python SithAssembly.Runtime.py models
 python SithAssembly.Runtime.py llm --provider ollama-local --profile qwen3-8b --prompt "Fasse diesen lokalen Befund zusammen."
 ```
 
-The client calls the local HTTP API only. Commands still pass through `SithAssembly//CommandDeck`; it does not execute arbitrary shell commands.
+The client accepts HTTP loopback server URLs only. If `SITH_API_TOKEN` is present, it sends it only to that loopback endpoint. Commands still pass through `SithAssembly//CommandDeck`; it does not execute arbitrary shell commands.
 
 `doctor` is read-only and reports configuration validity plus optional CUDA, xFormers and FlashAttention availability. `models` only shows the editable registry. `llm` sends one visible request only to a provider that has been explicitly enabled in `config/local_model_registry.json`; its normalized readable response is printed directly in the terminal.
 

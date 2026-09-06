@@ -13,8 +13,9 @@ class FakeResponse:
     def __init__(self, payload: dict) -> None:
         self.payload = payload
 
-    def read(self) -> bytes:
-        return json.dumps(self.payload).encode("utf-8")
+    def read(self, amount: int = -1) -> bytes:
+        encoded = json.dumps(self.payload).encode("utf-8")
+        return encoded if amount < 0 else encoded[:amount]
 
     def __enter__(self) -> "FakeResponse":
         return self
@@ -53,3 +54,28 @@ class LocalLlmTests(unittest.TestCase):
         self.assertEqual(result["content"], "Readable output")
         self.assertEqual(result["thinking"], "Reasoning")
         self.assertEqual(result["response_contract"], "qwen_evidence_v1")
+
+    def test_registry_rejects_loopback_url_with_embedded_credentials(self) -> None:
+        project_data = Path(__file__).resolve().parent.parent / "data"
+        with tempfile.TemporaryDirectory(dir=project_data) as directory:
+            path = Path(directory) / "models.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "providers": [
+                            {
+                                "id": "invalid",
+                                "runtime": "Ollama",
+                                "enabled": False,
+                                "protocol": "ollama_chat",
+                                "base_url": "http://user:password@127.0.0.1:11434",
+                            }
+                        ],
+                        "model_profiles": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "loopback URL"):
+                LocalModelRegistry(path).snapshot()

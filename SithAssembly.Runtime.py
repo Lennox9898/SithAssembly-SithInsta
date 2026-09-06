@@ -2,18 +2,51 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
+from urllib.parse import urlparse
+
+
+LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
+MAX_CLIENT_RESPONSE_BYTES = 20 * 1024 * 1024
 
 
 def request(url: str, method: str = "GET", payload: dict | None = None) -> bytes:
     body = json.dumps(payload).encode("utf-8") if payload is not None else None
     headers = {"Content-Type": "application/json"} if body is not None else {}
+    api_token = os.environ.get("SITH_API_TOKEN")
+    if api_token:
+        headers["Authorization"] = f"Bearer {api_token}"
     call = urllib.request.Request(url, data=body, method=method, headers=headers)
     with urllib.request.urlopen(call, timeout=10) as response:
-        return response.read()
+        response_body = response.read(MAX_CLIENT_RESPONSE_BYTES + 1)
+    if len(response_body) > MAX_CLIENT_RESPONSE_BYTES:
+        raise ValueError("local server response is limited to 20 MB")
+    return response_body
+
+
+def local_server_url(value: str) -> str:
+    parsed = urlparse(value)
+    if (
+        parsed.scheme != "http"
+        or parsed.hostname not in LOOPBACK_HOSTS
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+        or parsed.path not in {"", "/"}
+    ):
+        raise ValueError("runtime client accepts HTTP loopback server URLs only")
+    try:
+        port = parsed.port
+    except ValueError as error:
+        raise ValueError("runtime client URL has an invalid port") from error
+    if port is not None and not 1 <= port <= 65535:
+        raise ValueError("runtime client URL has an invalid port")
+    return value.rstrip("/")
 
 
 def main() -> int:
@@ -49,9 +82,9 @@ def main() -> int:
     llm.add_argument("--temperature", type=float, default=0.2)
     llm.add_argument("--max-output-tokens", type=int)
     args = parser.parse_args()
-    server_url = args.command_url or args.url
 
     try:
+        server_url = local_server_url(args.command_url or args.url)
         if args.action == "status":
             print(request(f"{server_url}/api/runtime").decode("utf-8"))
         elif args.action == "command":
@@ -78,8 +111,9 @@ def main() -> int:
             if args.max_output_tokens is not None:
                 payload["max_output_tokens"] = args.max_output_tokens
             print(request(f"{server_url}/api/llm/generate", "POST", payload).decode("utf-8"))
-    except urllib.error.URLError as error:
-        print(f"Local server is not reachable: {error.reason}", file=sys.stderr)
+    except (urllib.error.URLError, ValueError) as error:
+        detail = error.reason if isinstance(error, urllib.error.URLError) else str(error)
+        print(f"Local server is not reachable: {detail}", file=sys.stderr)
         return 1
     return 0
 

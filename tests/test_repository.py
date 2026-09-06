@@ -45,6 +45,19 @@ class RepositoryTests(unittest.TestCase):
             if db_path.exists():
                 db_path.unlink()
 
+    def test_rejects_unsafe_external_urls(self) -> None:
+        db_path = Path("data") / f"test_repository_urls_{uuid4().hex}.db"
+        try:
+            repo = Repository(db_path)
+            with self.assertRaisesRegex(ValueError, "http or https"):
+                repo.create_observation({"handle": "@node_a", "body": "Captured text", "source_url": "javascript:alert(1)"})
+            case = repo.create_case({"title": "URL validation"})
+            with self.assertRaisesRegex(ValueError, "http or https"):
+                repo.add_case_source(case["id"], "file:///sensitive.txt")
+        finally:
+            if db_path.exists():
+                db_path.unlink()
+
 
 if __name__ == "__main__":
     unittest.main()

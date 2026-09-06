@@ -6,6 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from src.analyzer import score_text
 from src.agent_controller import AgentController
@@ -27,6 +28,11 @@ from src.comment_anomaly import CommentAnomalyEngine
 from src.depth_engine import LocalDepthEngine
 from src.ocr_engine import LocalOcrEngine
 from src.evidence_vault import EvidenceVault
+
+
+MAX_LOCAL_IMAGE_BYTES = 8 * 1024 * 1024
+MAX_LOCAL_IMAGE_PIXELS = 40_000_000
+MAX_EXTERNAL_URL_CHARS = 2_048
 
 
 class Repository:
@@ -272,7 +278,7 @@ class Repository:
         body = self._require_text(payload.get("body"), "body")
         display_name = self._clean_text(payload.get("display_name"))
         content_type = self._clean_text(payload.get("content_type")) or "reel_comment"
-        source_url = self._clean_text(payload.get("source_url"))
+        source_url = self._optional_http_url(payload.get("source_url"), "source_url")
         captured_at = self._clean_text(payload.get("captured_at")) or utc_timestamp()
         cleaned_sources = self._clean_sources(payload.get("sources", []))
         cleaned_relationships = self._clean_relationships(payload.get("relationships", []), platform)
@@ -828,11 +834,17 @@ class Repository:
             content = base64.b64decode(encoded, validate=True)
         except (ValueError, binascii.Error) as error:
             raise ValueError("content_base64 must be valid base64") from error
-        if not content or len(content) > 8 * 1024 * 1024:
+        if not content or len(content) > MAX_LOCAL_IMAGE_BYTES:
             raise ValueError("local image evidence is limited to 8 MB")
         suffix = self._image_suffix(content)
         if suffix is None:
             raise ValueError("only JPEG, PNG, GIF and WebP image evidence is accepted")
+        dimensions = self._image_dimensions(content, suffix)
+        if dimensions is None:
+            raise ValueError("local image evidence has invalid dimensions")
+        width, height = dimensions
+        if width < 1 or height < 1 or width * height > MAX_LOCAL_IMAGE_PIXELS:
+            raise ValueError("local image evidence is limited to 40 megapixels")
 
         with open_connection(self.db_path) as connection:
             self._require_case(connection, case_id)
@@ -1201,7 +1213,7 @@ class Repository:
         return [row for row in rows if domain in str(row.get("url", "")).lower()]
 
     def add_case_source(self, case_id: int, url: str, label: str = "Manually added source") -> dict[str, Any]:
-        clean_url = self._require_text(url, "url")
+        clean_url = self._require_http_url(url, "url")
         clean_label = self._clean_text(label) or "Manually added source"
         with open_connection(self.db_path) as connection:
             self._require_case(connection, case_id)
@@ -1573,6 +1585,78 @@ class Repository:
             return ".webp"
         return None
 
+    @staticmethod
+    def _image_dimensions(content: bytes, suffix: str) -> tuple[int, int] | None:
+        if suffix == ".png":
+            if len(content) < 24 or content[12:16] != b"IHDR":
+                return None
+            return int.from_bytes(content[16:20], "big"), int.from_bytes(content[20:24], "big")
+        if suffix == ".gif":
+            if len(content) < 10:
+                return None
+            return int.from_bytes(content[6:8], "little"), int.from_bytes(content[8:10], "little")
+        if suffix == ".jpg":
+            return Repository._jpeg_dimensions(content)
+        if suffix == ".webp":
+            return Repository._webp_dimensions(content)
+        return None
+
+    @staticmethod
+    def _jpeg_dimensions(content: bytes) -> tuple[int, int] | None:
+        index = 2
+        start_of_frame_markers = {0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF}
+        while index + 3 < len(content):
+            if content[index] != 0xFF:
+                index += 1
+                continue
+            while index < len(content) and content[index] == 0xFF:
+                index += 1
+            if index >= len(content):
+                return None
+            marker = content[index]
+            index += 1
+            if marker in {0xD8, 0xD9} or 0xD0 <= marker <= 0xD7:
+                continue
+            if index + 2 > len(content):
+                return None
+            segment_length = int.from_bytes(content[index:index + 2], "big")
+            if segment_length < 2 or index + segment_length > len(content):
+                return None
+            if marker in start_of_frame_markers:
+                if segment_length < 7:
+                    return None
+                height = int.from_bytes(content[index + 3:index + 5], "big")
+                width = int.from_bytes(content[index + 5:index + 7], "big")
+                return width, height
+            index += segment_length
+        return None
+
+    @staticmethod
+    def _webp_dimensions(content: bytes) -> tuple[int, int] | None:
+        index = 12
+        while index + 8 <= len(content):
+            chunk_type = content[index:index + 4]
+            chunk_length = int.from_bytes(content[index + 4:index + 8], "little")
+            payload_start = index + 8
+            payload_end = payload_start + chunk_length
+            if payload_end > len(content):
+                return None
+            payload = content[payload_start:payload_end]
+            if chunk_type == b"VP8X" and len(payload) >= 10:
+                width = 1 + int.from_bytes(payload[4:7], "little")
+                height = 1 + int.from_bytes(payload[7:10], "little")
+                return width, height
+            if chunk_type == b"VP8 " and len(payload) >= 10 and payload[3:6] == b"\x9d\x01\x2a":
+                width = int.from_bytes(payload[6:8], "little") & 0x3FFF
+                height = int.from_bytes(payload[8:10], "little") & 0x3FFF
+                return width, height
+            if chunk_type == b"VP8L" and len(payload) >= 5 and payload[0] == 0x2F:
+                width = 1 + payload[1] + ((payload[2] & 0x3F) << 8)
+                height = 1 + (payload[2] >> 6) + (payload[3] << 2) + ((payload[4] & 0x0F) << 10)
+                return width, height
+            index = payload_end + (chunk_length % 2)
+        return None
+
     def _resolve_evidence_path(self, file_path: str) -> Path | None:
         if not file_path:
             return None
@@ -1770,6 +1854,21 @@ class Repository:
             raise ValueError(f"{field_name} is required")
         return cleaned
 
+    def _optional_http_url(self, value: Any, field_name: str) -> str:
+        cleaned = self._clean_text(value)
+        if not cleaned:
+            return ""
+        return self._require_http_url(cleaned, field_name)
+
+    def _require_http_url(self, value: Any, field_name: str) -> str:
+        cleaned = self._require_text(value, field_name)
+        if len(cleaned) > MAX_EXTERNAL_URL_CHARS or any(character.isspace() for character in cleaned):
+            raise ValueError(f"{field_name} must be a valid http or https URL")
+        parsed = urlparse(cleaned)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+            raise ValueError(f"{field_name} must be a valid http or https URL")
+        return cleaned
+
     def _clean_sources(self, sources: Any) -> list[dict[str, str]]:
         cleaned_sources = []
         if not isinstance(sources, list):
@@ -1783,7 +1882,7 @@ class Repository:
             cleaned_sources.append(
                 {
                     "title": title,
-                    "url": self._clean_text(raw.get("url")),
+                    "url": self._optional_http_url(raw.get("url"), "sources.url"),
                     "excerpt": self._clean_text(raw.get("excerpt")),
                 }
             )

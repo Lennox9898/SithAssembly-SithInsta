@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import hmac
 import json
 import mimetypes
+import os
 import re
+import socket
+import threading
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -25,6 +29,38 @@ from src.deployment_preflight import DeploymentPreflight
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 WEB_DIR = ROOT_DIR / "web"
+LOOPBACK_BIND_HOSTS = {"127.0.0.1", "::1", "localhost"}
+MAX_REQUEST_BODY_BYTES = 12 * 1024 * 1024
+MAX_STATIC_FILE_BYTES = 4 * 1024 * 1024
+DEFAULT_MAX_WORKERS = 16
+
+
+class BoundedThreadingHTTPServer(ThreadingHTTPServer):
+    """Threaded local server with bounded concurrent request handling."""
+
+    daemon_threads = True
+    block_on_close = False
+    request_queue_size = 32
+
+    def __init__(self, address: tuple[str, int], handler: type[BaseHTTPRequestHandler], max_workers: int) -> None:
+        self._request_slots = threading.BoundedSemaphore(max_workers)
+        super().__init__(address, handler)
+
+    def process_request(self, request: socket.socket, client_address: tuple[str, int]) -> None:
+        if not self._request_slots.acquire(blocking=False):
+            try:
+                request.sendall(b"HTTP/1.0 503 Service Unavailable\r\nConnection: close\r\nContent-Length: 0\r\n\r\n")
+            except OSError:
+                pass
+            self.shutdown_request(request)
+            return
+        super().process_request(request, client_address)
+
+    def process_request_thread(self, request: socket.socket, client_address: tuple[str, int]) -> None:
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._request_slots.release()
 
 
 class SignalDeskHandler(BaseHTTPRequestHandler):
@@ -44,12 +80,23 @@ class SignalDeskHandler(BaseHTTPRequestHandler):
     runtime_doctor = RuntimeDoctor(ROOT_DIR)
     deployment_preflight = DeploymentPreflight(ROOT_DIR)
     compute_mode = "auto"
+    api_token: str | None = None
+    request_timeout_seconds = 15
+
+    def setup(self) -> None:
+        super().setup()
+        self.connection.settimeout(self.request_timeout_seconds)
 
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         path = parsed.path
         query = {key: values[-1] for key, values in parse_qs(parsed.query).items()}
         self._log_request("GET", path, query_keys=sorted(query))
+
+        if not self._is_authorized_api_request(path):
+            self._log_event("authentication_rejected", method="GET", path=path)
+            self._send_unauthorized()
+            return
 
         if path == "/api/health":
             self._send_json({"status": "ok", "product": "SithAssembly//Instawatch"})
@@ -245,6 +292,11 @@ class SignalDeskHandler(BaseHTTPRequestHandler):
         path = parsed.path
         self._log_request("POST", path)
 
+        if not self._is_authorized_api_request(path):
+            self._log_event("authentication_rejected", method="POST", path=path)
+            self._send_unauthorized()
+            return
+
         try:
             payload = self._read_json()
             if path == "/api/commands":
@@ -385,6 +437,9 @@ class SignalDeskHandler(BaseHTTPRequestHandler):
         except json.JSONDecodeError:
             self._log_event("request_rejected", path=path, reason="invalid_json")
             self._send_json({"error": "invalid_json"}, status=HTTPStatus.BAD_REQUEST)
+        except TimeoutError:
+            self._log_event("request_rejected", path=path, reason="request_timeout")
+            self._send_json({"error": "request_timeout"}, status=HTTPStatus.REQUEST_TIMEOUT)
         except Exception as error:
             self._log_event("request_error", path=path, error_type=type(error).__name__)
             self._send_json({"error": "internal_error"}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
@@ -393,12 +448,23 @@ class SignalDeskHandler(BaseHTTPRequestHandler):
         return
 
     def _read_json(self) -> dict:
-        length = int(self.headers.get("Content-Length", "0"))
-        if length > 12 * 1024 * 1024:
+        if self.headers.get("Transfer-Encoding"):
+            raise ValueError("chunked request bodies are not supported")
+        raw_length = self.headers.get("Content-Length", "0")
+        try:
+            length = int(raw_length)
+        except ValueError as error:
+            raise ValueError("invalid Content-Length") from error
+        if length < 0 or length > MAX_REQUEST_BODY_BYTES:
             raise ValueError("request body is limited to 12 MB")
         if length == 0:
             return {}
+        content_type = self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
+        if content_type != "application/json":
+            raise ValueError("request body must use application/json")
         body = self.rfile.read(length)
+        if len(body) != length:
+            raise ValueError("incomplete request body")
         payload = json.loads(body.decode("utf-8"))
         if not isinstance(payload, dict):
             raise ValueError("request body must be a JSON object")
@@ -408,6 +474,7 @@ class SignalDeskHandler(BaseHTTPRequestHandler):
     def _send_json(self, payload: object, status: HTTPStatus = HTTPStatus.OK) -> None:
         response = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
+        self._send_security_headers(api_response=True)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(response)))
         self.end_headers()
@@ -416,6 +483,7 @@ class SignalDeskHandler(BaseHTTPRequestHandler):
 
     def _send_bytes(self, payload: bytes, content_type: str, filename: str) -> None:
         self.send_response(HTTPStatus.OK)
+        self._send_security_headers(api_response=True)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
         self.send_header("Content-Length", str(len(payload)))
@@ -434,17 +502,26 @@ class SignalDeskHandler(BaseHTTPRequestHandler):
 
         resolved_root = self.web_root.resolve()
         resolved_target = target.resolve()
-        if not str(resolved_target).startswith(str(resolved_root)):
+        try:
+            resolved_target.relative_to(resolved_root)
+        except ValueError:
             self._send_json({"error": "forbidden"}, status=HTTPStatus.FORBIDDEN)
             return
         if not resolved_target.exists() or not resolved_target.is_file():
             self._send_json({"error": "not_found"}, status=HTTPStatus.NOT_FOUND)
             return
+        if resolved_target.stat().st_size > MAX_STATIC_FILE_BYTES:
+            self._send_json({"error": "file_too_large"}, status=HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
+            return
 
         mime_type, _ = mimetypes.guess_type(resolved_target.name)
         content = resolved_target.read_bytes()
         self.send_response(HTTPStatus.OK)
-        self.send_header("Content-Type", f"{mime_type or 'application/octet-stream'}; charset=utf-8")
+        self._send_security_headers(api_response=False)
+        content_type = mime_type or "application/octet-stream"
+        if content_type.startswith("text/") or content_type in {"application/javascript", "application/json"}:
+            content_type = f"{content_type}; charset=utf-8"
+        self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(content)))
         self.end_headers()
         self.wfile.write(content)
@@ -457,6 +534,41 @@ class SignalDeskHandler(BaseHTTPRequestHandler):
             return int(value)
         except ValueError:
             return 100
+
+    def _is_authorized_api_request(self, path: str) -> bool:
+        if not path.startswith("/api/") or path == "/api/health" or self.api_token is None:
+            return True
+        authorization = self.headers.get("Authorization", "")
+        if not authorization.startswith("Bearer "):
+            return False
+        supplied = authorization.removeprefix("Bearer ")
+        return hmac.compare_digest(supplied.encode("utf-8"), self.api_token.encode("utf-8"))
+
+    def _send_unauthorized(self) -> None:
+        response = b'{"error":"authentication_required"}'
+        self.send_response(HTTPStatus.UNAUTHORIZED)
+        self._send_security_headers(api_response=True)
+        self.send_header("WWW-Authenticate", "Bearer")
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(response)))
+        self.end_headers()
+        self.wfile.write(response)
+        self._log_response(HTTPStatus.UNAUTHORIZED, len(response))
+
+    def _send_security_headers(self, api_response: bool) -> None:
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Cross-Origin-Opener-Policy", "same-origin")
+        self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+        if api_response:
+            self.send_header("Cache-Control", "no-store")
+            return
+        self.send_header("Cache-Control", "no-store")
+        self.send_header(
+            "Content-Security-Policy",
+            "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; object-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data: blob:",
+        )
 
     def _log_request(self, method: str, path: str, **fields: object) -> None:
         if self.runtime_logger:
@@ -471,7 +583,25 @@ class SignalDeskHandler(BaseHTTPRequestHandler):
             self.runtime_logger.event(name, **fields)
 
 
-def run(host: str = "127.0.0.1", port: int = 8080, dev_mode: bool = False, compute_mode: str = "auto") -> None:
+def run(
+    host: str = "127.0.0.1",
+    port: int = 8080,
+    dev_mode: bool = False,
+    compute_mode: str = "auto",
+    allow_network: bool = False,
+    max_workers: int = DEFAULT_MAX_WORKERS,
+) -> None:
+    normalized_host = host.strip().lower()
+    network_bind = normalized_host not in LOOPBACK_BIND_HOSTS
+    if not 1 <= port <= 65535:
+        raise ValueError("port must be an integer from 1 to 65535")
+    if not 1 <= max_workers <= 64:
+        raise ValueError("max_workers must be an integer from 1 to 64")
+    api_token = (os.environ.get("SITH_API_TOKEN") or None) if network_bind else None
+    if network_bind and not allow_network:
+        raise ValueError("network binding requires --allow-network")
+    if network_bind and (api_token is None or len(api_token) < 24):
+        raise ValueError("network binding requires SITH_API_TOKEN with at least 24 characters")
     runtime_logger = RuntimeLogger(DATA_DIR / "logs", dev_mode=dev_mode)
     runtime = ModuleRuntime(ROOT_DIR / "config" / "module_registry.json", runtime_logger)
     try:
@@ -491,8 +621,9 @@ def run(host: str = "127.0.0.1", port: int = 8080, dev_mode: bool = False, compu
     SignalDeskHandler.runtime = runtime
     SignalDeskHandler.dev_mode = dev_mode
     SignalDeskHandler.compute_mode = compute_mode
-    server = ThreadingHTTPServer((host, port), SignalDeskHandler)
-    runtime_logger.event("server_started", host=host, port=port)
+    SignalDeskHandler.api_token = api_token
+    server = BoundedThreadingHTTPServer((host, port), SignalDeskHandler, max_workers=max_workers)
+    runtime_logger.event("server_started", host=host, port=port, network_bind=network_bind, authenticated=api_token is not None, max_workers=max_workers)
     print(f"SithAssembly//Instawatch running on http://{host}:{port} ({'dev' if dev_mode else 'normal'} mode)")
     try:
         server.serve_forever()

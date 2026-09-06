@@ -12,6 +12,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run SithAssembly//Instawatch locally")
     parser.add_argument("--host", default="127.0.0.1", help="bind address; defaults to local-only")
     parser.add_argument("--port", type=int, default=8080, help="local port")
+    parser.add_argument("--allow-network", action="store_true", help="allow a non-loopback bind; requires SITH_API_TOKEN with at least 24 characters")
+    parser.add_argument("--max-workers", type=int, default=16, help="maximum concurrent HTTP requests from 1 to 64")
     parser.add_argument("--dev", action="store_true", help="write detailed local runtime logs")
     parser.add_argument("--compute-mode", choices=("cpu", "auto", "cuda"), default="auto", help="declare the intended local model compute mode; never installs packages")
     parser.add_argument("--check-config", action="store_true", help="validate local registries and exit without starting the server")
@@ -33,7 +35,14 @@ def main() -> int:
         return 0 if report.get("state", "ok") == "ok" else 1
     if options.compute_mode == "cuda" and not doctor.snapshot("cuda")["acceleration"]["cuda_available"]:
         parser.error("--compute-mode cuda requires an available local CUDA runtime; use --print-capabilities to inspect it")
-    run(host=options.host, port=options.port, dev_mode=options.dev, compute_mode=options.compute_mode)
+    run(
+        host=options.host,
+        port=options.port,
+        dev_mode=options.dev,
+        compute_mode=options.compute_mode,
+        allow_network=options.allow_network,
+        max_workers=options.max_workers,
+    )
     return 0
 
 

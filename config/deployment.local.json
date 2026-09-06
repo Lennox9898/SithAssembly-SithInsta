@@ -22,6 +22,7 @@
     "gpu_ocr": {"state": "prepared", "compose_profile": "gpu", "runtime": "PyTorch CUDA + PaddleOCR Transformers"}
   },
   "secret_references": {
+    "api_token": "env:SITH_API_TOKEN",
     "database_password": "env:SITH_POSTGRES_PASSWORD",
     "object_storage_access_key": "env:SITH_STORAGE_ACCESS_KEY",
     "object_storage_secret_key": "env:SITH_STORAGE_SECRET_KEY",
