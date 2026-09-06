@@ -1,5 +1,7 @@
 # SithAssembly//SithInsta 
 
+You can check out the [Wiki](https://github.com/Lennox9898/SithAssembly-SithInsta/wiki) for setup, architecture, modules, local analysis models, and deployment notes.
+
 It is the Instagram Guardian for protecting vulnerable groups and keeping an eye on suspects.
 
 it is Running on SithAssembly Framework , Allowing easy to use changeable Modules in dynamic use Cases,
