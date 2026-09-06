@@ -78,3 +78,7 @@ The complete locally available list is in `docs/COMMANDS.md`. `docs/Command-Kata
 4. Use the timeline, graph, and profile view. Graph edges link to their source URL and display time.
 5. Add notes, screenshot references, and clearly marked unconfirmed hypotheses only with evidence.
 6. Export the case from the header as JSON or PDF.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
