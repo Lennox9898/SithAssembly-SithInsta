@@ -29,10 +29,43 @@ class LocalLlmTests(unittest.TestCase):
         project_data = Path(__file__).resolve().parent.parent / "data"
         with tempfile.TemporaryDirectory(dir=project_data) as directory:
             path = Path(directory) / "models.json"
-            path.write_text(json.dumps({"providers": [{"id": "ollama", "runtime": "Ollama", "enabled": False, "protocol": "ollama_chat", "base_url": "http://127.0.0.1:11434"}], "model_profiles": []}), encoding="utf-8")
+            path.write_text(
+                json.dumps(
+                    {
+                        "providers": [
+                            {
+                                "id": "ollama",
+                                "runtime": "Ollama",
+                                "enabled": False,
+                                "protocol": "ollama_chat",
+                                "base_url": "http://127.0.0.1:11434",
+                                "api_token": "must-not-be-public",
+                            }
+                        ],
+                        "model_profiles": [
+                            {
+                                "id": "safe-profile",
+                                "runtime_models": {"ollama": "safe-model"},
+                                "private_key": "must-not-be-public",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
             snapshot = LocalModelRegistry(path).snapshot()
 
         self.assertFalse(snapshot["providers"][0]["enabled"])
+        self.assertNotIn("must-not-be-public", str(snapshot))
+
+    def test_registry_rejects_oversized_files(self) -> None:
+        project_data = Path(__file__).resolve().parent.parent / "data"
+        with tempfile.TemporaryDirectory(dir=project_data) as directory:
+            path = Path(directory) / "models.json"
+            path.write_bytes(b" " * (512 * 1024 + 1))
+
+            with self.assertRaisesRegex(ValueError, "512 KB"):
+                LocalModelRegistry(path).snapshot()
 
     def test_enabled_ollama_request_returns_normalized_readable_content(self) -> None:
         project_data = Path(__file__).resolve().parent.parent / "data"
@@ -48,7 +81,7 @@ class LocalLlmTests(unittest.TestCase):
                 encoding="utf-8",
             )
             bridge = LocalLlmBridge(LocalModelRegistry(path))
-            with patch("src.local_llm.urlopen", return_value=FakeResponse({"message": {"content": "Readable output", "thinking": "Reasoning"}, "prompt_eval_count": 2, "eval_count": 3})):
+            with patch("src.local_llm.open_local_request", return_value=FakeResponse({"message": {"content": "Readable output", "thinking": "Reasoning"}, "prompt_eval_count": 2, "eval_count": 3})):
                 result = bridge.generate({"provider_id": "ollama", "model_profile": "qwen", "messages": [{"role": "user", "content": "Test"}]})
 
         self.assertEqual(result["content"], "Readable output")
@@ -79,3 +112,9 @@ class LocalLlmTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "loopback URL"):
                 LocalModelRegistry(path).snapshot()
+
+    def test_redirect_handler_rejects_provider_redirects(self) -> None:
+        from src.local_llm import _RejectRedirects
+
+        handler = _RejectRedirects()
+        self.assertIsNone(handler.redirect_request(None, None, 302, "Found", {}, "https://example.org"))

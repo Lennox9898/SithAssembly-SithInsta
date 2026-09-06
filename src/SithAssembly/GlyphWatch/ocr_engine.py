@@ -4,7 +4,18 @@ from importlib.util import find_spec
 import json
 import os
 from pathlib import Path
+import re
 from typing import Any
+
+from src.SithAssembly.GlyphWatch.embedded_registry import EmbeddedModelRegistry
+
+
+MAX_OCR_LINES = 10_000
+MAX_OCR_LINE_CHARS = 8_192
+MAX_OCR_TEXT_CHARS = 1024 * 1024
+MAX_OCR_RESULT_DEPTH = 32
+MODEL_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$")
+REPOSITORY_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}/[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 
 class LocalOcrEngine:
@@ -18,12 +29,27 @@ class LocalOcrEngine:
         self.root_dir = root_dir
 
     def _profile(self) -> dict[str, Any]:
-        payload = json.loads(self.registry_path.read_text(encoding="utf-8"))
-        profiles = payload.get("profiles", [])
-        for profile in profiles:
-            if profile.get("id") == self.PROFILE_ID:
-                return profile
-        raise ValueError(f"OCR profile {self.PROFILE_ID} is missing from {self.registry_path}")
+        profile = EmbeddedModelRegistry(self.registry_path).profile(self.PROFILE_ID)
+        if not isinstance(profile.get("enabled"), bool):
+            raise ValueError("OCR profile enabled must be a boolean")
+        runtime = profile.get("runtime")
+        if not isinstance(runtime, str) or not runtime.strip() or len(runtime) > 120:
+            raise ValueError("OCR profile runtime must contain 1 to 120 characters")
+        for field in ("cache_dir", "paddlex_cache_dir"):
+            value = profile.get(field)
+            if not isinstance(value, str) or not value or len(value) > 1024 or "\x00" in value:
+                raise ValueError(f"OCR profile {field} is invalid")
+        if not re.fullmatch(r"auto|cpu|gpu:[0-9]{1,2}", str(profile.get("device", "auto"))):
+            raise ValueError("OCR profile device is invalid")
+        for field in ("detector", "recognizer"):
+            component = profile.get(field)
+            if not isinstance(component, dict):
+                raise ValueError(f"OCR profile {field} must be an object")
+            if not isinstance(component.get("model_name"), str) or MODEL_NAME.fullmatch(component["model_name"]) is None:
+                raise ValueError(f"OCR profile {field} model_name is invalid")
+            if not isinstance(component.get("repository"), str) or REPOSITORY_ID.fullmatch(component["repository"]) is None:
+                raise ValueError(f"OCR profile {field} repository is invalid")
+        return profile
 
     def _cache_dir(self, profile: dict[str, Any]) -> Path:
         override = os.environ.get("SITH_HUGGINGFACE_CACHE_DIR")
@@ -135,16 +161,23 @@ class LocalOcrEngine:
 
     def _extract_lines(self, results: list[Any]) -> list[dict[str, Any]]:
         lines: list[dict[str, Any]] = []
+        visited: set[int] = set()
         for result in results:
             payload = self._payload(result)
-            self._walk(payload, lines)
+            self._walk(payload, lines, visited=visited)
+            if len(lines) >= MAX_OCR_LINES:
+                break
         unique = []
         seen = set()
+        text_chars = 0
         for line in lines:
             key = (line["text"], line.get("confidence"))
             if line["text"] and key not in seen:
+                if text_chars + len(line["text"]) > MAX_OCR_TEXT_CHARS:
+                    break
                 unique.append(line)
                 seen.add(key)
+                text_chars += len(line["text"])
         return unique
 
     @staticmethod
@@ -161,7 +194,21 @@ class LocalOcrEngine:
                 return value.get("res", value) if isinstance(value, dict) else value
         return result
 
-    def _walk(self, value: Any, lines: list[dict[str, Any]]) -> None:
+    def _walk(
+        self,
+        value: Any,
+        lines: list[dict[str, Any]],
+        depth: int = 0,
+        visited: set[int] | None = None,
+    ) -> None:
+        if depth > MAX_OCR_RESULT_DEPTH or len(lines) >= MAX_OCR_LINES:
+            return
+        visited = visited if visited is not None else set()
+        if isinstance(value, (dict, list, tuple)):
+            identity = id(value)
+            if identity in visited:
+                return
+            visited.add(identity)
         if isinstance(value, dict):
             texts = value.get("rec_texts")
             scores = value.get("rec_scores") or []
@@ -169,16 +216,20 @@ class LocalOcrEngine:
                 for index, text in enumerate(texts):
                     if isinstance(text, str):
                         confidence = scores[index] if index < len(scores) else None
-                        lines.append({"text": text.strip(), "confidence": self._number(confidence)})
+                        lines.append({"text": text.strip()[:MAX_OCR_LINE_CHARS], "confidence": self._number(confidence)})
+                        if len(lines) >= MAX_OCR_LINES:
+                            return
             for key in ("text", "transcription"):
                 text = value.get(key)
                 if isinstance(text, str):
-                    lines.append({"text": text.strip(), "confidence": self._number(value.get("score") or value.get("confidence"))})
+                    lines.append({"text": text.strip()[:MAX_OCR_LINE_CHARS], "confidence": self._number(value.get("score") or value.get("confidence"))})
+                    if len(lines) >= MAX_OCR_LINES:
+                        return
             for child in value.values():
-                self._walk(child, lines)
+                self._walk(child, lines, depth + 1, visited)
         elif isinstance(value, (list, tuple)):
             for child in value:
-                self._walk(child, lines)
+                self._walk(child, lines, depth + 1, visited)
 
     @staticmethod
     def _number(value: Any) -> float | None:

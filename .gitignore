@@ -9,3 +9,11 @@ data/logs/
 data/evidence/
 data/vaults/
 data/vault_keys/
+
+# Operator secrets and local connector credentials
+.env
+.env.*
+!.env.example
+!deploy/.env.example
+deploy/.env.local
+config/instagram_accounts.local.json

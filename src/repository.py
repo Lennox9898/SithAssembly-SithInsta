@@ -4,6 +4,7 @@ import base64
 import binascii
 import hashlib
 import json
+import threading
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -33,6 +34,13 @@ from src.evidence_vault import EvidenceVault
 MAX_LOCAL_IMAGE_BYTES = 8 * 1024 * 1024
 MAX_LOCAL_IMAGE_PIXELS = 40_000_000
 MAX_EXTERNAL_URL_CHARS = 2_048
+MAX_OBSERVATION_BODY_CHARS = 100_000
+MAX_NOTE_CHARS = 50_000
+MAX_DESCRIPTION_CHARS = 20_000
+MAX_PROFILE_BIO_CHARS = 20_000
+MAX_SOURCE_EXCERPT_CHARS = 20_000
+MAX_SOURCES_PER_OBSERVATION = 50
+MAX_RELATIONSHIPS_PER_OBSERVATION = 100
 
 
 class Repository:
@@ -57,6 +65,9 @@ class Repository:
         self.ocr_engine = LocalOcrEngine()
         self.depth_engine = LocalDepthEngine()
         self.evidence_vault = EvidenceVault(self.vault_dir, self.db_path.parent / "vault_keys")
+        self._ocr_lock = threading.Lock()
+        self._depth_lock = threading.Lock()
+        self._vault_lock = threading.Lock()
         self._ensure_default_case()
         self._backfill_legacy_evidence()
         self._backfill_legacy_fingerprints()
@@ -273,17 +284,18 @@ class Repository:
         }
 
     def create_observation(self, payload: dict[str, Any]) -> dict[str, Any]:
-        handle = self._require_text(payload.get("handle"), "handle")
-        platform = self._clean_text(payload.get("platform")) or "instagram"
-        body = self._require_text(payload.get("body"), "body")
-        display_name = self._clean_text(payload.get("display_name"))
-        content_type = self._clean_text(payload.get("content_type")) or "reel_comment"
+        handle = self._require_text(payload.get("handle"), "handle", 128)
+        platform = self._optional_text(payload.get("platform"), "platform", 64) or "instagram"
+        body = self._require_text(payload.get("body"), "body", MAX_OBSERVATION_BODY_CHARS)
+        display_name = self._optional_text(payload.get("display_name"), "display_name", 512)
+        content_type = self._optional_text(payload.get("content_type"), "content_type", 64) or "reel_comment"
         source_url = self._optional_http_url(payload.get("source_url"), "source_url")
-        captured_at = self._clean_text(payload.get("captured_at")) or utc_timestamp()
+        captured_at = self._optional_text(payload.get("captured_at"), "captured_at", 64) or utc_timestamp()
         cleaned_sources = self._clean_sources(payload.get("sources", []))
         cleaned_relationships = self._clean_relationships(payload.get("relationships", []), platform)
         requested_case_id = payload.get("case_id")
         signals = self.collector.collect(payload)
+        cleaned_signal_links = [self._require_http_url(link, "captured body URL") for link in signals.links]
 
         analysis = score_text(body)
 
@@ -378,7 +390,7 @@ class Repository:
             for hashtag in signals.hashtags:
                 self._tag_observation(connection, case_id, observation_id, hashtag, "amber")
 
-            for link in signals.links:
+            for link in cleaned_signal_links:
                 connection.execute(
                     """
                     INSERT INTO evidence (case_id, observation_id, kind, label, url, captured_at, annotation, created_at)
@@ -427,7 +439,7 @@ class Repository:
                 )
 
             profile_changes = self._record_profile_snapshot(connection, case_id, actor_id, observation_id, payload, handle, display_name, captured_at)
-            previous_handle = self._clean_text(payload.get("previous_handle"))
+            previous_handle = self._optional_text(payload.get("previous_handle"), "previous_handle", 128)
             if previous_handle and previous_handle != handle:
                 previous_actor_id = self._get_or_create_actor(connection, previous_handle, platform, None)
                 confidence = self._bounded_confidence(payload.get("account_switch_confidence"), 0.5)
@@ -615,8 +627,8 @@ class Repository:
             return [dict(row) for row in connection.execute(query).fetchall()]
 
     def create_case(self, payload: dict[str, Any]) -> dict[str, Any]:
-        title = self._require_text(payload.get("title"), "title")
-        description = self._clean_text(payload.get("description"))
+        title = self._require_text(payload.get("title"), "title", 300)
+        description = self._optional_text(payload.get("description"), "description", MAX_DESCRIPTION_CHARS)
         timestamp = utc_timestamp()
         with open_connection(self.db_path) as connection:
             cursor = connection.execute(
@@ -777,11 +789,15 @@ class Repository:
         return [dict(row) for row in rows]
 
     def add_note(self, case_id: int, payload: dict[str, Any]) -> dict[str, Any]:
-        body = self._require_text(payload.get("body"), "body")
+        body = self._require_text(payload.get("body"), "body", MAX_NOTE_CHARS)
         observation_id = payload.get("observation_id") or None
         actor_id = payload.get("actor_id") or None
         with open_connection(self.db_path) as connection:
             self._require_case(connection, case_id)
+            if observation_id is not None:
+                self._require_case_observation(connection, case_id, observation_id)
+            if actor_id is not None:
+                self._require_case_actor(connection, case_id, actor_id)
             cursor = connection.execute(
                 "INSERT INTO case_notes (case_id, observation_id, actor_id, body, created_at) VALUES (?, ?, ?, ?, ?)",
                 (case_id, observation_id, actor_id, body, utc_timestamp()),
@@ -790,19 +806,21 @@ class Repository:
         return {"id": int(cursor.lastrowid), "body": body}
 
     def add_identity_claim(self, case_id: int, payload: dict[str, Any]) -> dict[str, Any]:
-        actor_id = int(payload.get("actor_id", 0))
+        actor_id = payload.get("actor_id")
+        if not isinstance(actor_id, int) or isinstance(actor_id, bool) or actor_id < 1:
+            raise ValueError("actor_id must be a positive integer")
         evidence_observation_id = payload.get("evidence_observation_id") or None
         claim = self.identity_resolver.validate(
-            str(payload.get("candidate_label", "")),
-            str(payload.get("basis", "")),
+            self._require_text(payload.get("candidate_label"), "candidate_label", 500),
+            self._require_text(payload.get("basis"), "basis", 20_000),
             self._bounded_confidence(payload.get("confidence"), 0.5),
-            self._clean_text(payload.get("state")) or "unverified",
+            self._optional_text(payload.get("state"), "state", 32) or "unverified",
         )
         with open_connection(self.db_path) as connection:
             self._require_case(connection, case_id)
-            actor = connection.execute("SELECT id FROM actors WHERE id = ?", (actor_id,)).fetchone()
-            if actor is None:
-                raise ValueError("actor not found")
+            self._require_case_actor(connection, case_id, actor_id)
+            if evidence_observation_id is not None:
+                self._require_case_observation(connection, case_id, evidence_observation_id)
             cursor = connection.execute(
                 """INSERT INTO identity_claims (case_id, actor_id, candidate_label, basis, confidence, state, evidence_observation_id, created_at)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -811,14 +829,14 @@ class Repository:
         return {"id": int(cursor.lastrowid), **claim.__dict__}
 
     def add_screenshot(self, case_id: int, payload: dict[str, Any]) -> dict[str, Any]:
-        label = self._require_text(payload.get("label"), "label")
+        label = self._require_text(payload.get("label"), "label", 500)
         observation_id = payload.get("observation_id") or None
-        url = self._clean_text(payload.get("url"))
-        annotation = self._clean_text(payload.get("annotation"))
-        if not url:
-            raise ValueError("url is required for a screenshot reference")
+        url = self._require_http_url(payload.get("url"), "url")
+        annotation = self._optional_text(payload.get("annotation"), "annotation", MAX_SOURCE_EXCERPT_CHARS)
         with open_connection(self.db_path) as connection:
             self._require_case(connection, case_id)
+            if observation_id is not None:
+                self._require_case_observation(connection, case_id, observation_id)
             cursor = connection.execute(
                 """INSERT INTO evidence (case_id, observation_id, kind, label, url, captured_at, annotation, created_at)
                    VALUES (?, ?, 'screenshot_reference', ?, ?, ?, ?, ?)""",
@@ -827,7 +845,7 @@ class Repository:
         return {"id": int(cursor.lastrowid), "label": label, "url": url, "annotation": annotation}
 
     def add_local_image(self, case_id: int, payload: dict[str, Any]) -> dict[str, Any]:
-        label = self._require_text(payload.get("label"), "label")
+        label = self._require_text(payload.get("label"), "label", 500)
         observation_id = payload.get("observation_id") or None
         encoded = self._require_text(payload.get("content_base64"), "content_base64")
         try:
@@ -897,7 +915,13 @@ class Repository:
         if image_path is None or not image_path.exists():
             raise ValueError("local image evidence file is unavailable")
 
-        result = self.ocr_engine.extract(image_path, language=language)
+        language = self._optional_text(language, "language", 32) or "en"
+        if not self._ocr_lock.acquire(blocking=False):
+            raise ValueError("OCR inference is already running")
+        try:
+            result = self.ocr_engine.extract(image_path, language=language)
+        finally:
+            self._ocr_lock.release()
         with open_connection(self.db_path) as connection:
             cursor = connection.execute(
                 """INSERT INTO ocr_runs (case_id, evidence_id, engine, model_profile, state, text, result_json, created_at)
@@ -943,7 +967,12 @@ class Repository:
 
         output_relative_path = Path("evidence") / f"case-{case_id}" / "derivatives" / f"evidence-{evidence_id}-depth-anything-v2-small.png"
         output_path = self.db_path.parent / output_relative_path
-        result = self.depth_engine.derive(image_path, output_path)
+        if not self._depth_lock.acquire(blocking=False):
+            raise ValueError("depth inference is already running")
+        try:
+            result = self.depth_engine.derive(image_path, output_path)
+        finally:
+            self._depth_lock.release()
         result["artifact_path"] = str(output_relative_path) if result["state"] == "completed" else None
         with open_connection(self.db_path) as connection:
             cursor = connection.execute(
@@ -976,6 +1005,14 @@ class Repository:
         return self.evidence_vault.status()
 
     def create_evidence_vault(self, case_id: int, passphrase: str, operator: str) -> dict[str, Any]:
+        if not self._vault_lock.acquire(blocking=False):
+            raise ValueError("evidence vault creation is already running")
+        try:
+            return self._create_evidence_vault(case_id, passphrase, operator)
+        finally:
+            self._vault_lock.release()
+
+    def _create_evidence_vault(self, case_id: int, passphrase: str, operator: str) -> dict[str, Any]:
         report = self.export_case(case_id)
         if report is None:
             raise ValueError("case not found")
@@ -1038,7 +1075,7 @@ class Repository:
     def verify_evidence_vault(self, vault_id: int) -> dict[str, Any]:
         with open_connection(self.db_path) as connection:
             row = connection.execute(
-                "SELECT id, case_id, file_path FROM vault_exports WHERE id = ?",
+                "SELECT id, case_id, file_path, ciphertext_sha256 FROM vault_exports WHERE id = ?",
                 (vault_id,),
             ).fetchone()
             if row is None:
@@ -1048,6 +1085,11 @@ class Repository:
             raise ValueError("vault export path is invalid")
         try:
             result = self.evidence_vault.verify(path)
+            if (
+                result.get("case_id") != row["case_id"]
+                or result.get("ciphertext_sha256") != row["ciphertext_sha256"]
+            ):
+                raise ValueError("vault package does not match its database record")
             state = "verified"
         except ValueError as error:
             result = {"state": "invalid", "message": str(error)}
@@ -1067,7 +1109,10 @@ class Repository:
         path = self._resolve_vault_path(str(row["file_path"]))
         if path is None or not path.exists():
             return None
-        return str(row["filename"]), path.read_bytes()
+        try:
+            return str(row["filename"]), self.evidence_vault.read_package(path)
+        except ValueError:
+            return None
 
     def list_processing(self, case_id: int) -> list[dict[str, Any]]:
         with open_connection(self.db_path) as connection:
@@ -1214,7 +1259,7 @@ class Repository:
 
     def add_case_source(self, case_id: int, url: str, label: str = "Manually added source") -> dict[str, Any]:
         clean_url = self._require_http_url(url, "url")
-        clean_label = self._clean_text(label) or "Manually added source"
+        clean_label = self._optional_text(label, "label", 500) or "Manually added source"
         with open_connection(self.db_path) as connection:
             self._require_case(connection, case_id)
             cursor = connection.execute(
@@ -1226,12 +1271,13 @@ class Repository:
         return {"id": int(cursor.lastrowid), "label": clean_label, "url": clean_url}
 
     def add_case_tag(self, case_id: int, label: str, color: str = "amber") -> dict[str, Any]:
-        clean_label = self._require_text(label, "tag")
+        clean_label = self._require_text(label, "tag", 200)
+        clean_color = self._optional_text(color, "color", 32) or "amber"
         with open_connection(self.db_path) as connection:
             self._require_case(connection, case_id)
             connection.execute(
                 "INSERT OR IGNORE INTO tags (case_id, label, color, created_at) VALUES (?, ?, ?, ?)",
-                (case_id, clean_label, color, utc_timestamp()),
+                (case_id, clean_label, clean_color, utc_timestamp()),
             )
             row = connection.execute("SELECT id, label, color FROM tags WHERE case_id = ? AND label = ?", (case_id, clean_label)).fetchone()
             connection.execute("UPDATE cases SET updated_at = ? WHERE id = ?", (utc_timestamp(), case_id))
@@ -1429,11 +1475,17 @@ class Repository:
 
     def import_case_payload(self, case_id: int, payload: Any) -> dict[str, Any]:
         preview = self.case_importer.preview(payload)
+        label = self._optional_text(payload.get("label"), "label", 500) if isinstance(payload, dict) else "JSON import"
         created_ids: list[int] = []
+        rejected = list(preview.rejected)
         for item in preview.accepted:
-            detail = self.create_observation({**item, "case_id": case_id})
-            created_ids.append(detail["observation"]["id"])
-        label = self._clean_text(payload.get("label")) if isinstance(payload, dict) else "JSON import"
+            import_index = item.get("_import_index")
+            observation = {key: value for key, value in item.items() if key != "_import_index"}
+            try:
+                detail = self.create_observation({**observation, "case_id": case_id})
+                created_ids.append(detail["observation"]["id"])
+            except ValueError as error:
+                rejected.append({"index": import_index, "reason": str(error)})
         with open_connection(self.db_path) as connection:
             self._require_case(connection, case_id)
             connection.execute(
@@ -1443,13 +1495,18 @@ class Repository:
                     case_id,
                     label or "JSON import",
                     self.evidence_integrity.payload_hash(payload),
-                    len(preview.accepted),
-                    len(preview.rejected),
+                    len(created_ids),
+                    len(rejected),
                     utc_timestamp(),
                 ),
             )
             self._record_job(connection, case_id, module_name("case_importer"), f"Imported {len(created_ids)} validated JSON items.", "completed", None, None)
-        return {**preview.as_dict(), "created_observation_ids": created_ids}
+        return {
+            "accepted_count": len(created_ids),
+            "rejected_count": len(rejected),
+            "rejected": sorted(rejected, key=lambda item: int(item.get("index", -1))),
+            "created_observation_ids": created_ids,
+        }
 
     def list_import_batches(self, case_id: int) -> list[dict[str, Any]]:
         with open_connection(self.db_path) as connection:
@@ -1551,8 +1608,8 @@ class Repository:
     def _execute_ocr_job(self, job: dict[str, Any]) -> WorkerOutcome:
         evidence_id = self._job_evidence_id(job)
         input_payload = job["input"]
-        confirmed = bool(input_payload.get("confirm_model_download"))
-        language = self._clean_text(input_payload.get("language")) or "en"
+        confirmed = input_payload.get("confirm_model_download") is True
+        language = self._optional_text(input_payload.get("language"), "language", 32) or "en"
         result = self.run_ocr(job["case_id"], evidence_id, confirmed=confirmed, language=language)
         if result["state"] == "completed":
             return WorkerOutcome("completed", result, "Explicit local OCR job completed.")
@@ -1560,7 +1617,7 @@ class Repository:
 
     def _execute_depth_job(self, job: dict[str, Any]) -> WorkerOutcome:
         evidence_id = self._job_evidence_id(job)
-        confirmed = bool(job["input"].get("confirm_depth_analysis"))
+        confirmed = job["input"].get("confirm_depth_analysis") is True
         result = self.run_depth(job["case_id"], evidence_id, confirmed=confirmed)
         if result["state"] == "completed":
             return WorkerOutcome("completed", result, "Explicit local depth job completed.")
@@ -1771,6 +1828,38 @@ class Repository:
         if connection.execute("SELECT id FROM cases WHERE id = ?", (case_id,)).fetchone() is None:
             raise ValueError("case not found")
 
+    @staticmethod
+    def _require_case_observation(connection: Any, case_id: int, observation_id: Any) -> None:
+        if not isinstance(observation_id, int) or isinstance(observation_id, bool) or observation_id < 1:
+            raise ValueError("observation_id must be a positive integer")
+        row = connection.execute(
+            "SELECT 1 FROM case_observations WHERE case_id = ? AND observation_id = ?",
+            (case_id, observation_id),
+        ).fetchone()
+        if row is None:
+            raise ValueError("observation not found in case")
+
+    @staticmethod
+    def _require_case_actor(connection: Any, case_id: int, actor_id: Any) -> None:
+        if not isinstance(actor_id, int) or isinstance(actor_id, bool) or actor_id < 1:
+            raise ValueError("actor_id must be a positive integer")
+        row = connection.execute(
+            """SELECT 1 FROM actors a WHERE a.id = ? AND (
+                   EXISTS (
+                       SELECT 1 FROM observations o
+                       JOIN case_observations co ON co.observation_id = o.id
+                       WHERE co.case_id = ? AND o.actor_id = a.id
+                   ) OR EXISTS (
+                       SELECT 1 FROM relationships r
+                       JOIN case_observations co ON co.observation_id = r.evidence_observation_id
+                       WHERE co.case_id = ? AND (r.from_actor_id = a.id OR r.to_actor_id = a.id)
+                   )
+               )""",
+            (actor_id, case_id, case_id),
+        ).fetchone()
+        if row is None:
+            raise ValueError("actor not found in case")
+
     def _tag_observation(self, connection: Any, case_id: int, observation_id: int, label: str, color: str) -> None:
         connection.execute(
             "INSERT OR IGNORE INTO tags (case_id, label, color, created_at) VALUES (?, ?, ?, ?)",
@@ -1796,8 +1885,8 @@ class Repository:
         current = {
             "handle": handle,
             "display_name": display_name,
-            "bio": self._clean_text(payload.get("profile_bio")),
-            "profile_url": self._clean_text(payload.get("profile_url")),
+            "bio": self._optional_text(payload.get("profile_bio"), "profile_bio", MAX_PROFILE_BIO_CHARS),
+            "profile_url": self._optional_http_url(payload.get("profile_url"), "profile_url"),
         }
         if not any(current.values()):
             return 0
@@ -1848,10 +1937,24 @@ class Repository:
             (case_id, stage, message, state, confidence, observation_id, utc_timestamp()),
         )
 
-    def _require_text(self, value: Any, field_name: str) -> str:
+    def _require_text(self, value: Any, field_name: str, maximum: int | None = None) -> str:
+        if not isinstance(value, str):
+            raise ValueError(f"{field_name} must be a string")
         cleaned = self._clean_text(value)
         if not cleaned:
             raise ValueError(f"{field_name} is required")
+        if maximum is not None and len(cleaned) > maximum:
+            raise ValueError(f"{field_name} is limited to {maximum} characters")
+        return cleaned
+
+    def _optional_text(self, value: Any, field_name: str, maximum: int) -> str:
+        if value is None or value == "":
+            return ""
+        if not isinstance(value, str):
+            raise ValueError(f"{field_name} must be a string")
+        cleaned = self._clean_text(value)
+        if len(cleaned) > maximum:
+            raise ValueError(f"{field_name} is limited to {maximum} characters")
         return cleaned
 
     def _optional_http_url(self, value: Any, field_name: str) -> str:
@@ -1862,44 +1965,55 @@ class Repository:
 
     def _require_http_url(self, value: Any, field_name: str) -> str:
         cleaned = self._require_text(value, field_name)
-        if len(cleaned) > MAX_EXTERNAL_URL_CHARS or any(character.isspace() for character in cleaned):
+        if len(cleaned) > MAX_EXTERNAL_URL_CHARS or any(
+            character.isspace() or ord(character) < 32 or ord(character) == 127
+            for character in cleaned
+        ):
             raise ValueError(f"{field_name} must be a valid http or https URL")
         parsed = urlparse(cleaned)
         if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+            raise ValueError(f"{field_name} must be a valid http or https URL")
+        try:
+            port = parsed.port
+        except ValueError as error:
+            raise ValueError(f"{field_name} must be a valid http or https URL") from error
+        if port is not None and not 1 <= port <= 65535:
             raise ValueError(f"{field_name} must be a valid http or https URL")
         return cleaned
 
     def _clean_sources(self, sources: Any) -> list[dict[str, str]]:
         cleaned_sources = []
-        if not isinstance(sources, list):
-            return cleaned_sources
+        if not isinstance(sources, list) or len(sources) > MAX_SOURCES_PER_OBSERVATION:
+            raise ValueError(f"sources must be a list with at most {MAX_SOURCES_PER_OBSERVATION} entries")
         for raw in sources:
             if not isinstance(raw, dict):
                 continue
-            title = self._clean_text(raw.get("title"))
+            title = self._optional_text(raw.get("title"), "sources.title", 500)
             if not title:
                 continue
             cleaned_sources.append(
                 {
                     "title": title,
                     "url": self._optional_http_url(raw.get("url"), "sources.url"),
-                    "excerpt": self._clean_text(raw.get("excerpt")),
+                    "excerpt": self._optional_text(raw.get("excerpt"), "sources.excerpt", MAX_SOURCE_EXCERPT_CHARS),
                 }
             )
         return cleaned_sources
 
     def _clean_relationships(self, relationships: Any, default_platform: str) -> list[dict[str, Any]]:
         cleaned_relationships = []
-        if not isinstance(relationships, list):
-            return cleaned_relationships
+        if not isinstance(relationships, list) or len(relationships) > MAX_RELATIONSHIPS_PER_OBSERVATION:
+            raise ValueError(
+                f"relationships must be a list with at most {MAX_RELATIONSHIPS_PER_OBSERVATION} entries"
+            )
         for raw in relationships:
             if not isinstance(raw, dict):
                 continue
-            handle = self._clean_text(raw.get("handle"))
+            handle = self._optional_text(raw.get("handle"), "relationships.handle", 128)
             if not handle:
                 continue
-            relation_type = self._clean_text(raw.get("relation_type")) or "co-mentioned"
-            platform = self._clean_text(raw.get("platform")) or default_platform
+            relation_type = self._optional_text(raw.get("relation_type"), "relationships.relation_type", 128) or "co-mentioned"
+            platform = self._optional_text(raw.get("platform"), "relationships.platform", 64) or default_platform
             try:
                 weight = float(raw.get("weight", 0.5))
             except (TypeError, ValueError):
@@ -1907,7 +2021,7 @@ class Repository:
             cleaned_relationships.append(
                 {
                     "handle": handle,
-                    "display_name": self._clean_text(raw.get("display_name")),
+                    "display_name": self._optional_text(raw.get("display_name"), "relationships.display_name", 512),
                     "platform": platform,
                     "relation_type": relation_type,
                     "weight": max(0.1, min(weight, 1.0)),

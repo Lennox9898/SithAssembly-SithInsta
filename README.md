@@ -25,7 +25,7 @@ SithAssembly will be the effort to Connect AI with ASM and even Bytecode.
 - `src/server.py`: HTTP API and static file delivery.
 - `src/module_runtime.py`: explicit JSON registry and controlled module startup hooks.
 - `src/runtime_logging.py`: local JSONL runtime logs with sensitive-field redaction.
-- `config/module_registry.json`: the allowed `src.*` modules loaded at startup.
+- `config/module_registry.json`: the allowed `src.SithAssembly.*` modules loaded at startup.
 - `web/`: local casework interface.
 
 ## Import and Patterns
@@ -54,7 +54,7 @@ The external agent-stack dossier is stored unchanged at `docs/Agentenstack_Evalu
 
 ## EvidenceVault
 
-`SithAssembly//EvidenceVault` creates an opt-in `.sifvault.json` package for an existing case with a ZIP payload, SHA-256 manifest, AES-256-GCM encryption, scrypt key derivation, and Ed25519 signature. The passphrase is used only during package creation and is not persisted. The UI export is opt-in; alternatively run `python SIF_EvidenceVault.py create --case-id <id>`. See `docs/MODULE_RUNTIME.md` and `docs/IMPORTANT_DISCLAIMER.md`.
+`SithAssembly//EvidenceVault` creates an opt-in `.sifvault.json` package for an existing case with a ZIP payload, SHA-256 manifest, AES-256-GCM encryption, scrypt key derivation, and Ed25519 signature. The passphrase is used only during package creation and is not persisted. Verification is anchored to the installation key in `data/vault_keys/`, which must be backed up separately and protected. The UI export is opt-in; alternatively run `python SIF_EvidenceVault.py create --case-id <id>`. See `docs/MODULE_RUNTIME.md`, `SECURITY.md`, and `docs/IMPORTANT_DISCLAIMER.md`.
 
 ## Command Console
 

@@ -1,4 +1,5 @@
 import base64
+import tempfile
 import shutil
 import unittest
 from pathlib import Path
@@ -107,6 +108,24 @@ class ModelAdapterTests(unittest.TestCase):
             self.assertEqual(pending["state"], "confirmation_required")
         finally:
             shutil.rmtree(workspace, ignore_errors=True)
+
+    def test_ocr_result_walker_rejects_cycles_and_bounds_lines(self) -> None:
+        cyclic_result: dict[str, object] = {"text": "x" * 10_000}
+        cyclic_result["cycle"] = cyclic_result
+
+        lines = LocalOcrEngine()._extract_lines([cyclic_result])
+
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(len(lines[0]["text"]), 8_192)
+
+    def test_embedded_model_registry_rejects_oversized_files(self) -> None:
+        project_data = Path(__file__).resolve().parent.parent / "data"
+        with tempfile.TemporaryDirectory(dir=project_data) as directory:
+            registry = Path(directory) / "embedded-models.json"
+            registry.write_bytes(b" " * (512 * 1024 + 1))
+
+            with self.assertRaisesRegex(ValueError, "512 KB"):
+                LocalOcrEngine(registry).status()
 
 
 if __name__ == "__main__":

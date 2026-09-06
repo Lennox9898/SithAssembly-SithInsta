@@ -19,9 +19,10 @@ class ModuleRuntimeTests(unittest.TestCase):
                 json.dumps(
                     {
                         "modules": [
-                            {"key": "collector", "import_path": "src.collector", "enabled": True},
+                            {"key": "collector", "import_path": "src.SithAssembly.VektorZero.collector", "enabled": True},
                             {"key": "unsafe", "import_path": "os", "enabled": True},
-                            {"key": "inactive", "import_path": "src.timeline_engine", "enabled": False},
+                            {"key": "wrong_scope", "import_path": "src.server", "enabled": True},
+                            {"key": "inactive", "import_path": "src.SithAssembly.ChronoWatch.timeline_engine", "enabled": False},
                         ]
                     }
                 ),
@@ -33,6 +34,7 @@ class ModuleRuntimeTests(unittest.TestCase):
 
         self.assertEqual(states["collector"], "loaded")
         self.assertEqual(states["unsafe"], "error")
+        self.assertEqual(states["wrong_scope"], "error")
         self.assertEqual(states["inactive"], "disabled")
 
     def test_runtime_logger_redacts_passphrase_and_tails_events(self) -> None:

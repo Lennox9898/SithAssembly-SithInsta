@@ -11,17 +11,36 @@ from urllib.parse import urlparse
 
 
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
+MAX_CLIENT_REQUEST_BYTES = 2 * 1024 * 1024
 MAX_CLIENT_RESPONSE_BYTES = 20 * 1024 * 1024
+MAX_CLIENT_URL_CHARS = 2048
+
+
+class _RejectRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, file_pointer, code, message, headers, new_url):
+        return None
+
+
+def open_local_request(request: urllib.request.Request, timeout: int):
+    return urllib.request.build_opener(urllib.request.ProxyHandler({}), _RejectRedirects()).open(request, timeout=timeout)
 
 
 def request(url: str, method: str = "GET", payload: dict | None = None) -> bytes:
-    body = json.dumps(payload).encode("utf-8") if payload is not None else None
+    _validate_loopback_url(url, root_only=False)
+    if method not in {"GET", "POST"}:
+        raise ValueError("runtime client supports GET and POST requests only")
+    try:
+        body = json.dumps(payload, allow_nan=False).encode("utf-8") if payload is not None else None
+    except (TypeError, ValueError) as error:
+        raise ValueError("runtime client payload must contain JSON-compatible values") from error
+    if body is not None and len(body) > MAX_CLIENT_REQUEST_BYTES:
+        raise ValueError("local server request is limited to 2 MB")
     headers = {"Content-Type": "application/json"} if body is not None else {}
     api_token = os.environ.get("SITH_API_TOKEN")
     if api_token:
         headers["Authorization"] = f"Bearer {api_token}"
     call = urllib.request.Request(url, data=body, method=method, headers=headers)
-    with urllib.request.urlopen(call, timeout=10) as response:
+    with open_local_request(call, timeout=10) as response:
         response_body = response.read(MAX_CLIENT_RESPONSE_BYTES + 1)
     if len(response_body) > MAX_CLIENT_RESPONSE_BYTES:
         raise ValueError("local server response is limited to 20 MB")
@@ -29,15 +48,24 @@ def request(url: str, method: str = "GET", payload: dict | None = None) -> bytes
 
 
 def local_server_url(value: str) -> str:
+    _validate_loopback_url(value, root_only=True)
+    return value.rstrip("/")
+
+
+def _validate_loopback_url(value: str, root_only: bool) -> None:
+    if not isinstance(value, str) or not value or len(value) > MAX_CLIENT_URL_CHARS:
+        raise ValueError("runtime client accepts HTTP loopback server URLs only")
+    if any(ord(character) < 32 or ord(character) == 127 for character in value):
+        raise ValueError("runtime client accepts HTTP loopback server URLs only")
     parsed = urlparse(value)
     if (
         parsed.scheme != "http"
         or parsed.hostname not in LOOPBACK_HOSTS
         or parsed.username is not None
         or parsed.password is not None
-        or parsed.query
         or parsed.fragment
-        or parsed.path not in {"", "/"}
+        or (root_only and (parsed.query or parsed.path not in {"", "/"}))
+        or (not root_only and (not parsed.path.startswith("/api/") or parsed.path.startswith("//")))
     ):
         raise ValueError("runtime client accepts HTTP loopback server URLs only")
     try:
@@ -46,7 +74,6 @@ def local_server_url(value: str) -> str:
         raise ValueError("runtime client URL has an invalid port") from error
     if port is not None and not 1 <= port <= 65535:
         raise ValueError("runtime client URL has an invalid port")
-    return value.rstrip("/")
 
 
 def main() -> int:

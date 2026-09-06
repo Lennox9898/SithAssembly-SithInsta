@@ -21,6 +21,8 @@ The current official OpenClaw documentation describes the Gateway as the control
 - `bridge.allowed_openclaw_tools`: intentionally empty until an exact tool allowlist has been reviewed.
 - `bridge.idempotency`: requires a stable ID when a future dispatcher hands work between systems.
 
+The configuration loader accepts an HTTP loopback gateway only, requires uppercase `env:` secret references, validates endpoint and tool allowlists, and refuses activation without a non-empty tool allowlist and configured dispatch policy. No outbound dispatcher exists yet.
+
 ## Planned Direction
 
 1. Install and configure OpenClaw separately, then verify its local gateway health and active tool inventory.

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "Explicit local module registry. Only listed src.* modules may be loaded at startup.",
+  "description": "Explicit local module registry. Only listed src.SithAssembly.* modules may be loaded at startup.",
   "modules": [
     {"key": "collector", "import_path": "src.SithAssembly.VektorZero.collector", "enabled": true},
     {"key": "profile_resolver", "import_path": "src.SithAssembly.MirrorFace.profile_resolver", "enabled": true},

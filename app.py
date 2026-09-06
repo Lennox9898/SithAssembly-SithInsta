@@ -12,7 +12,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run SithAssembly//Instawatch locally")
     parser.add_argument("--host", default="127.0.0.1", help="bind address; defaults to local-only")
     parser.add_argument("--port", type=int, default=8080, help="local port")
-    parser.add_argument("--allow-network", action="store_true", help="allow a non-loopback bind; requires SITH_API_TOKEN with at least 24 characters")
+    parser.add_argument("--allow-network", action="store_true", help="allow a non-loopback bind; requires SITH_API_TOKEN and an explicit Host allowlist")
+    parser.add_argument("--allowed-hosts", help="comma-separated Host header allowlist; required for network binding unless SITH_ALLOWED_HOSTS is set")
     parser.add_argument("--max-workers", type=int, default=16, help="maximum concurrent HTTP requests from 1 to 64")
     parser.add_argument("--dev", action="store_true", help="write detailed local runtime logs")
     parser.add_argument("--compute-mode", choices=("cpu", "auto", "cuda"), default="auto", help="declare the intended local model compute mode; never installs packages")
@@ -42,6 +43,7 @@ def main() -> int:
         compute_mode=options.compute_mode,
         allow_network=options.allow_network,
         max_workers=options.max_workers,
+        allowed_hosts=options.allowed_hosts,
     )
     return 0
 

@@ -44,4 +44,4 @@ The normalized response always contains readable `content`, optional `thinking`,
 4. Send one controlled request to `POST /api/llm/generate`.
 5. Persist only the output, model profile, provider, usage and evidence references required by the selected contract; do not put tokens or raw secrets into messages or logs.
 
-The bridge accepts only `127.0.0.1`, `localhost` and `::1` provider URLs. It does not make cloud inference requests.
+The bridge accepts only `127.0.0.1`, `localhost` and `::1` provider URLs. It disables environment proxies, rejects redirects, caps registry/request/response sizes, and exposes only allowlisted registry fields. It does not make cloud inference requests. These controls protect the bridge boundary; the selected local model runtime still needs its own access controls and resource limits.

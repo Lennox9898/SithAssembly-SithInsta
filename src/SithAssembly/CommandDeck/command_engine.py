@@ -31,6 +31,8 @@ class CommandResult:
 class CommandEngine:
     """Allowlisted local command layer for the case database, never a platform automation API."""
 
+    MAX_COMMAND_CHARS = 20_000
+
     HELP = {
         "/context": "Aktuellen lokalen Fallkontext anzeigen.",
         "/find posts --query <text>": "Lokale Beobachtungen durchsuchen.",
@@ -72,6 +74,8 @@ class CommandEngine:
         return result
 
     def _execute(self, raw_command: str, active_case_id: int | None) -> dict[str, Any]:
+        if not isinstance(raw_command, str) or len(raw_command) > self.MAX_COMMAND_CHARS:
+            raise ValueError(f"command must be a string with at most {self.MAX_COMMAND_CHARS} characters")
         raw_command = self._clean(raw_command)
         if not raw_command:
             raise ValueError("command is required")

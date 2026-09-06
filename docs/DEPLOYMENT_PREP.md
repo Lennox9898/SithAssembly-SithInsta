@@ -21,6 +21,7 @@ All infrastructure services are Compose profiles and require explicit image vari
 - Hugging Face, PaddleX, and temporary model files live under `SITH_RUNTIME_DIR` and are mounted at `/var/lib/sithassembly/runtime`.
 - `deploy/.env.example` maps these two paths to the local `data/` and `.runtime/` folders. Keep `deploy/.env.local` out of version control.
 - `SITH_API_TOKEN` is required for API containers and must be a randomly generated value of at least 24 characters stored outside version control.
+- `SITH_ALLOWED_HOSTS` must list the exact DNS names or IP addresses clients place in the HTTP Host header. Do not use a wildcard.
 - The `gpu` profile installs the pinned CUDA-enabled PyTorch pair and GlyphWatch runtime at image build time. It needs an NVIDIA-capable Linux Docker host with the NVIDIA Container Toolkit; it is not activated by default.
 
 ## Read-only preflight
@@ -47,5 +48,6 @@ docker compose --env-file deploy/.env.example -f deploy/compose.yml --profile gp
 4. Test encrypted backup and restore before transferring production evidence.
 5. Implement the worker as an idempotent JetStream consumer with an explicit review state.
 6. Place the API behind private VPN or an authenticated TLS reverse proxy before any non-loopback exposure. A production ASGI stack can replace the compatibility server later if required.
+7. Add per-user authentication, role and case authorization, edge rate limits, and centralized audit retention before offering access to multiple organizations.
 
 Do not expose the current compatibility container publicly. No service here authorizes platform scraping, automated posting, account management, or identity assertions.

@@ -13,6 +13,9 @@ from src.module_runtime import ModuleRuntime
 from src.deployment_preflight import DeploymentPreflight
 
 
+MAX_DIAGNOSTIC_CONFIG_BYTES = 512 * 1024
+
+
 class RuntimeDoctor:
     """Read-only local diagnostics for the server and optional AI runtimes."""
 
@@ -56,13 +59,16 @@ class RuntimeDoctor:
             "embedded_model_registry.json",
         ):
             try:
-                payload = json.loads((self.root_dir / "config" / filename).read_text(encoding="utf-8"))
+                path = self.root_dir / "config" / filename
+                if path.stat().st_size > MAX_DIAGNOSTIC_CONFIG_BYTES:
+                    raise ValueError("diagnostic configuration is limited to 512 KB")
+                payload = json.loads(path.read_text(encoding="utf-8"))
                 state = "ok" if isinstance(payload, dict) else "error"
                 if filename == "embedded_model_registry.json":
                     profiles = payload.get("profiles", []) if isinstance(payload, dict) else []
                     state = "ok" if profiles and all(self._valid_embedded_profile(profile) for profile in profiles) else "error"
                 checks.append({"name": filename, "state": state})
-            except (OSError, json.JSONDecodeError) as error:
+            except (OSError, ValueError, json.JSONDecodeError) as error:
                 checks.append({"name": filename, "state": "error", "detail": f"{type(error).__name__}: {error}"})
         return {"state": "ok" if all(check["state"] == "ok" for check in checks) else "error", "checks": checks}
 

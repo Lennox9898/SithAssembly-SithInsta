@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import hashlib
 from importlib.util import find_spec
-import json
 import math
 import os
 from pathlib import Path
+import re
 from typing import Any
+
+from src.SithAssembly.GlyphWatch.embedded_registry import EmbeddedModelRegistry
 
 
 class LocalDepthEngine:
@@ -20,11 +22,35 @@ class LocalDepthEngine:
         self.root_dir = root_dir
 
     def _profile(self) -> dict[str, Any]:
-        payload = json.loads(self.registry_path.read_text(encoding="utf-8"))
-        for profile in payload.get("profiles", []):
-            if profile.get("id") == self.PROFILE_ID:
-                return profile
-        raise ValueError(f"Depth profile {self.PROFILE_ID} is missing from {self.registry_path}")
+        profile = EmbeddedModelRegistry(self.registry_path).profile(self.PROFILE_ID)
+        if not isinstance(profile.get("enabled"), bool):
+            raise ValueError("depth profile enabled must be a boolean")
+        runtime = profile.get("runtime")
+        if not isinstance(runtime, str) or not runtime.strip() or len(runtime) > 120:
+            raise ValueError("depth profile runtime must contain 1 to 120 characters")
+        repository = profile.get("repository")
+        if not isinstance(repository, str) or re.fullmatch(
+            r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}/[A-Za-z0-9][A-Za-z0-9._-]{0,127}",
+            repository,
+        ) is None:
+            raise ValueError("depth profile repository is invalid")
+        revision = profile.get("revision")
+        if not isinstance(revision, str) or re.fullmatch(r"[0-9a-f]{40}", revision) is None:
+            raise ValueError("depth profile revision must be a full commit hash")
+        model_dir = profile.get("model_dir")
+        if not isinstance(model_dir, str) or not model_dir or len(model_dir) > 1024 or "\x00" in model_dir:
+            raise ValueError("depth profile model_dir is invalid")
+        if not re.fullmatch(r"auto|cpu|cuda(?::[0-9]{1,2})?", str(profile.get("device", "auto"))):
+            raise ValueError("depth profile device is invalid")
+        output = profile.get("output")
+        if (
+            not isinstance(output, dict)
+            or output.get("format") != "png"
+            or output.get("bit_depth") != 16
+            or output.get("kind") != "relative_depth_derivative"
+        ):
+            raise ValueError("depth profile output contract is invalid")
+        return profile
 
     def _model_dir(self, profile: dict[str, Any]) -> Path:
         override = os.environ.get("SITH_DEPTH_ANYTHING_MODEL_DIR")

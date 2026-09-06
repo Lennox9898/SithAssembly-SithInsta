@@ -10,7 +10,7 @@
     "failure_strategy": "backoff_and_report",
     "report_topic": "collection.run_reported"
   },
-  "notes": "Human-editable local account inventory. This file is ignored by Git. Store only secret references, never a plaintext password.",
+  "notes": "Copy this template to instagram_accounts.local.json. Store only environment-variable references, never plaintext credentials.",
   "accounts": [
     {
       "id": "ig_monitor_01",

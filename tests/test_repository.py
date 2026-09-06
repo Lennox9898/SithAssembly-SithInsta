@@ -54,6 +54,20 @@ class RepositoryTests(unittest.TestCase):
             case = repo.create_case({"title": "URL validation"})
             with self.assertRaisesRegex(ValueError, "http or https"):
                 repo.add_case_source(case["id"], "file:///sensitive.txt")
+            with self.assertRaisesRegex(ValueError, "http or https"):
+                repo.add_screenshot(case["id"], {"label": "Unsafe", "url": "javascript:alert(1)"})
+            with self.assertRaisesRegex(ValueError, "http or https"):
+                repo.add_case_source(case["id"], "https://example.org:not-a-port/source")
+        finally:
+            if db_path.exists():
+                db_path.unlink()
+
+    def test_rejects_oversized_observation_body(self) -> None:
+        db_path = Path("data") / f"test_repository_size_{uuid4().hex}.db"
+        try:
+            repo = Repository(db_path)
+            with self.assertRaisesRegex(ValueError, "100000 characters"):
+                repo.create_observation({"handle": "@node_a", "body": "x" * 100_001})
         finally:
             if db_path.exists():
                 db_path.unlink()

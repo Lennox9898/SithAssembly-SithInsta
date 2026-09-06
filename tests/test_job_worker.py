@@ -53,6 +53,23 @@ class LocalJobWorkerTests(unittest.TestCase):
             self.assertEqual(result["state"], "completed")
             self.assertEqual(result["result"]["artifact_path"], model_result["artifact_path"])
 
+    def test_string_confirmation_does_not_activate_depth_job(self) -> None:
+        project_data = Path(__file__).resolve().parent.parent / "data"
+        with tempfile.TemporaryDirectory(dir=project_data) as directory:
+            repository = Repository(Path(directory) / "worker.db")
+            queued = repository.queue_agent_job(
+                1,
+                {
+                    "topic": "evidence.depth_requested",
+                    "input": {"evidence_id": 11, "confirm_depth_analysis": "true"},
+                },
+            )
+
+            result = repository.execute_agent_job(queued["jobs"][0]["id"])
+
+            self.assertEqual(result["state"], "needs_review")
+            self.assertEqual(result["result"]["state"], "confirmation_required")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,15 +1,15 @@
 # SithAssembly Module Runtime
 
-Die Projekt-Runtime bleibt `app.py` mit dem lokalen HTTP-Server. `src/assembly_manifest.py` ist die zentrale, maschinenlesbare Registry der vorhandenen Module und Profile.
+The project runtime remains `app.py` with the local HTTP server. `src/assembly_manifest.py` is the central machine-readable registry of the available modules and profiles.
 
-Die aus der beigefuegten Runtime-Idee uebernommenen Namen werden auf vorhandene Komponenten abgebildet:
+Names adopted from the attached runtime concept map to existing components:
 
-- `VantaIndex` entspricht dem lokalen Evidenzregister und `EvidenceIntegrity`.
-- `BlackSignal` entspricht der textbasierten Heuristik und `SignalForge` dem separaten Kommentar-Ausreisser-Review.
-- `GhostCluster`, `ShadowGraph`, `Traceborne` und `SpectreReport` entsprechen Graph-, Timeline- und Report-Komponenten.
-- `SpectreNet.Identity` bleibt ein manuelles Hypothesen- und Review-Modul, keine automatische Personenidentifikation.
-- `EvidenceVault` ist aktiv: signierte und verschluesselte lokale Exportpakete mit Manifest.
+- `VantaIndex` maps to the local evidence registry and `EvidenceIntegrity`.
+- `BlackSignal` maps to the text heuristic, while `SignalForge` provides separate comment-outlier review.
+- `GhostCluster`, `ShadowGraph`, `Traceborne`, and `SpectreReport` map to graph, timeline, and report components.
+- `SpectreNet.Identity` remains a manual hypothesis and review module, not automated person identification.
+- `EvidenceVault` is active for signed and encrypted local export packages with manifests.
 
-Nicht implementiert oder aktiviert sind automatische Plattform-Capture, Account-Erstellung, Posting, Direktnachrichten, externe Benachrichtigungen, Gesichts-/Personenidentifikation und pauschale Bot-Feststellungen.
+Automatic platform capture, account creation, posting, direct messages, external notifications, face or person identification, and blanket bot determinations are not implemented or enabled.
 
-Jede ausgefuehrte Komponente muss Belege, Warnungen und einen Review-Status liefern oder die Verarbeitung auslassen. Ein Score oder eine Modellantwort ist keine Tatsachenbehauptung.
+Every executed component must return evidence references, warnings, and a review state, or skip processing. A score or model response is not a factual claim.

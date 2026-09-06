@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from datetime import UTC, datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -21,6 +22,18 @@ SENSITIVE_KEY_MARKERS = {
 }
 SENSITIVE_KEYS = {"content_base64", "image_base64"}
 MAX_LOG_VALUE_CHARS = 4096
+MAX_LOG_TAIL_BYTES = 2 * 1024 * 1024
+MAX_LOG_EXPORT_BYTES = 6 * 1024 * 1024
+
+
+class _PrivateRotatingFileHandler(RotatingFileHandler):
+    def _open(self):
+        stream = super()._open()
+        try:
+            os.chmod(self.baseFilename, 0o600)
+        except OSError:
+            pass
+        return stream
 
 
 def _is_sensitive_key(value: object) -> bool:
@@ -51,7 +64,7 @@ class RuntimeLogger:
         self.logger = logging.getLogger(f"sithassembly.runtime.{id(self)}")
         self.logger.setLevel(logging.DEBUG if dev_mode else logging.INFO)
         self.logger.propagate = False
-        self.handler = RotatingFileHandler(self.log_path, maxBytes=5 * 1024 * 1024, backupCount=4, encoding="utf-8")
+        self.handler = _PrivateRotatingFileHandler(self.log_path, maxBytes=5 * 1024 * 1024, backupCount=4, encoding="utf-8")
         self.handler.setFormatter(logging.Formatter("%(message)s"))
         self.logger.addHandler(self.handler)
 
@@ -76,11 +89,19 @@ class RuntimeLogger:
         limit = max(1, min(limit, 500))
         if not self.log_path.exists():
             return []
+        with self.log_path.open("rb") as handle:
+            size = handle.seek(0, os.SEEK_END)
+            start = max(0, size - MAX_LOG_TAIL_BYTES)
+            handle.seek(start)
+            content = handle.read(MAX_LOG_TAIL_BYTES)
+        if start:
+            separator = content.find(b"\n")
+            content = content[separator + 1:] if separator >= 0 else b""
         entries: list[dict[str, Any]] = []
-        for line in self.log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-limit:]:
+        for raw_line in content.splitlines()[-limit:]:
             try:
-                entries.append(json.loads(line))
-            except json.JSONDecodeError:
+                entries.append(json.loads(raw_line.decode("utf-8")))
+            except (UnicodeDecodeError, json.JSONDecodeError):
                 entries.append({"event": "unparseable_log_line"})
         return entries
 
@@ -88,7 +109,11 @@ class RuntimeLogger:
         if not self.log_path.exists():
             return b""
         self.handler.flush()
-        return self.log_path.read_bytes()
+        with self.log_path.open("rb") as handle:
+            payload = handle.read(MAX_LOG_EXPORT_BYTES + 1)
+        if len(payload) > MAX_LOG_EXPORT_BYTES:
+            raise ValueError("runtime log export is limited to 6 MB")
+        return payload
 
     def close(self) -> None:
         self.logger.removeHandler(self.handler)

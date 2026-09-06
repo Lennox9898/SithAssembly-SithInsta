@@ -56,6 +56,46 @@ class CaseworkTests(unittest.TestCase):
             if db_path.exists():
                 db_path.unlink()
 
+    def test_case_references_cannot_cross_case_boundaries(self) -> None:
+        db_path = Path("data") / f"test_casework_boundaries_{uuid4().hex}.db"
+        try:
+            repo = Repository(db_path)
+            first_case = repo.create_case({"title": "First case"})
+            second_case = repo.create_case({"title": "Second case"})
+            second = repo.create_observation(
+                {
+                    "case_id": second_case["id"],
+                    "handle": "@second_case_actor",
+                    "body": "Evidence belonging only to the second case.",
+                }
+            )
+            observation_id = second["observation"]["id"]
+            actor_id = second["actor"]["id"]
+
+            with self.assertRaisesRegex(ValueError, "observation not found in case"):
+                repo.add_note(first_case["id"], {"body": "Invalid link", "observation_id": observation_id})
+            with self.assertRaisesRegex(ValueError, "actor not found in case"):
+                repo.add_identity_claim(
+                    first_case["id"],
+                    {
+                        "actor_id": actor_id,
+                        "candidate_label": "Invalid identity link",
+                        "basis": "The referenced actor belongs to another case.",
+                    },
+                )
+            with self.assertRaisesRegex(ValueError, "observation not found in case"):
+                repo.add_screenshot(
+                    first_case["id"],
+                    {
+                        "label": "Invalid screenshot link",
+                        "url": "https://example.org/screenshot",
+                        "observation_id": observation_id,
+                    },
+                )
+        finally:
+            if db_path.exists():
+                db_path.unlink()
+
 
 if __name__ == "__main__":
     unittest.main()

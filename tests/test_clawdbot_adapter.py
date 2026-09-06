@@ -50,3 +50,21 @@ class ClawdbotAdapterTests(unittest.TestCase):
 
         self.assertIn("commands.execute", {item["key"] for item in manifest["capabilities"]})
         self.assertEqual(manifest["planned_handoff"]["topic"], "clawdbot.task_requested")
+
+    def test_adapter_rejects_remote_gateway_and_unsafe_enablement(self) -> None:
+        project_data = Path(__file__).resolve().parent.parent / "data"
+        with tempfile.TemporaryDirectory(dir=project_data) as directory:
+            path = Path(directory) / "clawdbot.json"
+            path.write_text(
+                json.dumps({"enabled": False, "gateway": {"base_url": "https://gateway.example"}, "bridge": {}}),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "loopback"):
+                ClawdbotAdapter(path).status()
+
+            path.write_text(
+                json.dumps({"enabled": True, "gateway": {}, "bridge": {"allowed_openclaw_tools": []}}),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "tool allowlist"):
+                ClawdbotAdapter(path).status()

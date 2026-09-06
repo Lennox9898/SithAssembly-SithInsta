@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hmac
+import ipaddress
 import json
 import mimetypes
 import os
@@ -10,7 +11,7 @@ import threading
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlparse, urlsplit
 
 from src.assembly_manifest import public_manifest
 from src.agent_coordination import AgentCoordinator, AgentReportJournal
@@ -33,6 +34,35 @@ LOOPBACK_BIND_HOSTS = {"127.0.0.1", "::1", "localhost"}
 MAX_REQUEST_BODY_BYTES = 12 * 1024 * 1024
 MAX_STATIC_FILE_BYTES = 4 * 1024 * 1024
 DEFAULT_MAX_WORKERS = 16
+DNS_HOST_PATTERN = re.compile(
+    r"(?=^.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*"
+    r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$"
+)
+
+
+def _normalize_allowed_host(value: str) -> str:
+    candidate = value.strip().lower().rstrip(".")
+    if candidate.startswith("[") and candidate.endswith("]"):
+        candidate = candidate[1:-1]
+    if not candidate or any(character.isspace() for character in candidate):
+        raise ValueError("allowed hosts must contain DNS names or IP addresses without ports")
+    try:
+        return ipaddress.ip_address(candidate).compressed.lower()
+    except ValueError:
+        if not DNS_HOST_PATTERN.fullmatch(candidate):
+            raise ValueError("allowed hosts must contain DNS names or IP addresses without ports")
+        return candidate
+
+
+def _parse_allowed_hosts(value: str | None, network_bind: bool) -> frozenset[str]:
+    if value is None or not value.strip():
+        if network_bind:
+            raise ValueError("network binding requires SITH_ALLOWED_HOSTS or --allowed-hosts")
+        return frozenset(_normalize_allowed_host(host) for host in LOOPBACK_BIND_HOSTS)
+    entries = [entry for entry in value.split(",") if entry.strip()]
+    if not entries or len(entries) > 32:
+        raise ValueError("allowed hosts must contain 1 to 32 comma-separated entries")
+    return frozenset(_normalize_allowed_host(entry) for entry in entries)
 
 
 class BoundedThreadingHTTPServer(ThreadingHTTPServer):
@@ -64,6 +94,8 @@ class BoundedThreadingHTTPServer(ThreadingHTTPServer):
 
 
 class SignalDeskHandler(BaseHTTPRequestHandler):
+    server_version = "SithAssembly"
+    sys_version = ""
     repository = Repository()
     case_manager = CaseManager(repository)
     command_engine = CommandEngine(repository)
@@ -81,6 +113,7 @@ class SignalDeskHandler(BaseHTTPRequestHandler):
     deployment_preflight = DeploymentPreflight(ROOT_DIR)
     compute_mode = "auto"
     api_token: str | None = None
+    allowed_hosts = frozenset(LOOPBACK_BIND_HOSTS)
     request_timeout_seconds = 15
 
     def setup(self) -> None:
@@ -88,9 +121,26 @@ class SignalDeskHandler(BaseHTTPRequestHandler):
         self.connection.settimeout(self.request_timeout_seconds)
 
     def do_GET(self) -> None:  # noqa: N802
+        try:
+            self._handle_get()
+        except ValueError as error:
+            self._log_event("request_rejected", path=urlparse(self.path).path, reason=str(error))
+            self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
+        except Exception as error:
+            self._log_event("request_error", path=urlparse(self.path).path, error_type=type(error).__name__)
+            self._send_json({"error": "internal_error"}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+
+    def _handle_get(self) -> None:
         parsed = urlparse(self.path)
         path = parsed.path
-        query = {key: values[-1] for key, values in parse_qs(parsed.query).items()}
+        if not self._is_allowed_host_header():
+            self._log_event("host_rejected", method="GET", path=path)
+            self._send_misdirected_request()
+            return
+        query = {
+            key: values[-1]
+            for key, values in parse_qs(parsed.query, max_num_fields=50).items()
+        }
         self._log_request("GET", path, query_keys=sorted(query))
 
         if not self._is_authorized_api_request(path):
@@ -290,6 +340,10 @@ class SignalDeskHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         path = parsed.path
+        if not self._is_allowed_host_header():
+            self._log_event("host_rejected", method="POST", path=path)
+            self._send_misdirected_request()
+            return
         self._log_request("POST", path)
 
         if not self._is_authorized_api_request(path):
@@ -395,8 +449,8 @@ class SignalDeskHandler(BaseHTTPRequestHandler):
                 result = self.repository.run_ocr(
                     int(case_ocr_match.group(1)),
                     int(case_ocr_match.group(2)),
-                    bool(payload.get("confirm_model_download")),
-                    str(payload.get("language", "en")),
+                    payload.get("confirm_model_download") is True,
+                    payload.get("language", "en"),
                 )
                 self._send_json(result, status=HTTPStatus.CREATED)
                 return
@@ -406,20 +460,20 @@ class SignalDeskHandler(BaseHTTPRequestHandler):
                 result = self.repository.run_depth(
                     int(case_depth_match.group(1)),
                     int(case_depth_match.group(2)),
-                    bool(payload.get("confirm_depth_analysis")),
+                    payload.get("confirm_depth_analysis") is True,
                 )
                 self._send_json(result, status=HTTPStatus.CREATED)
                 return
 
             case_vault_match = re.fullmatch(r"/api/cases/(\d+)/vault", path)
             if case_vault_match:
-                if not bool(payload.get("confirm")):
+                if payload.get("confirm") is not True:
                     self._send_json({"state": "confirmation_required", "message": "Passphrase is used once to create a local encrypted vault."})
                     return
                 created = self.repository.create_evidence_vault(
                     int(case_vault_match.group(1)),
-                    str(payload.get("passphrase", "")),
-                    str(payload.get("operator", "local analyst")),
+                    payload.get("passphrase", ""),
+                    payload.get("operator", "local analyst"),
                 )
                 self._send_json(created, status=HTTPStatus.CREATED)
                 return
@@ -510,12 +564,12 @@ class SignalDeskHandler(BaseHTTPRequestHandler):
         if not resolved_target.exists() or not resolved_target.is_file():
             self._send_json({"error": "not_found"}, status=HTTPStatus.NOT_FOUND)
             return
-        if resolved_target.stat().st_size > MAX_STATIC_FILE_BYTES:
+        mime_type, _ = mimetypes.guess_type(resolved_target.name)
+        with resolved_target.open("rb") as handle:
+            content = handle.read(MAX_STATIC_FILE_BYTES + 1)
+        if len(content) > MAX_STATIC_FILE_BYTES:
             self._send_json({"error": "file_too_large"}, status=HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
             return
-
-        mime_type, _ = mimetypes.guess_type(resolved_target.name)
-        content = resolved_target.read_bytes()
         self.send_response(HTTPStatus.OK)
         self._send_security_headers(api_response=False)
         content_type = mime_type or "application/octet-stream"
@@ -543,6 +597,30 @@ class SignalDeskHandler(BaseHTTPRequestHandler):
             return False
         supplied = authorization.removeprefix("Bearer ")
         return hmac.compare_digest(supplied.encode("utf-8"), self.api_token.encode("utf-8"))
+
+    def _is_allowed_host_header(self) -> bool:
+        raw_host = self.headers.get("Host", "")
+        if not raw_host or len(raw_host) > 320 or any(character.isspace() for character in raw_host):
+            return False
+        try:
+            parsed = urlsplit(f"//{raw_host}")
+            if parsed.username is not None or parsed.password is not None or parsed.path or parsed.query or parsed.fragment:
+                return False
+            _ = parsed.port
+            hostname = _normalize_allowed_host(parsed.hostname or "")
+        except ValueError:
+            return False
+        return hostname in self.allowed_hosts
+
+    def _send_misdirected_request(self) -> None:
+        response = b'{"error":"host_not_allowed"}'
+        self.send_response(HTTPStatus.MISDIRECTED_REQUEST)
+        self._send_security_headers(api_response=True)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(response)))
+        self.end_headers()
+        self.wfile.write(response)
+        self._log_response(HTTPStatus.MISDIRECTED_REQUEST, len(response))
 
     def _send_unauthorized(self) -> None:
         response = b'{"error":"authentication_required"}'
@@ -590,6 +668,7 @@ def run(
     compute_mode: str = "auto",
     allow_network: bool = False,
     max_workers: int = DEFAULT_MAX_WORKERS,
+    allowed_hosts: str | None = None,
 ) -> None:
     normalized_host = host.strip().lower()
     network_bind = normalized_host not in LOOPBACK_BIND_HOSTS
@@ -597,11 +676,15 @@ def run(
         raise ValueError("port must be an integer from 1 to 65535")
     if not 1 <= max_workers <= 64:
         raise ValueError("max_workers must be an integer from 1 to 64")
-    api_token = (os.environ.get("SITH_API_TOKEN") or None) if network_bind else None
+    api_token = os.environ.get("SITH_API_TOKEN") or None
     if network_bind and not allow_network:
         raise ValueError("network binding requires --allow-network")
     if network_bind and (api_token is None or len(api_token) < 24):
         raise ValueError("network binding requires SITH_API_TOKEN with at least 24 characters")
+    if api_token is not None and len(api_token) < 24:
+        raise ValueError("SITH_API_TOKEN must contain at least 24 characters")
+    configured_allowed_hosts = allowed_hosts if allowed_hosts is not None else os.environ.get("SITH_ALLOWED_HOSTS")
+    host_allowlist = _parse_allowed_hosts(configured_allowed_hosts, network_bind)
     runtime_logger = RuntimeLogger(DATA_DIR / "logs", dev_mode=dev_mode)
     runtime = ModuleRuntime(ROOT_DIR / "config" / "module_registry.json", runtime_logger)
     try:
@@ -622,8 +705,17 @@ def run(
     SignalDeskHandler.dev_mode = dev_mode
     SignalDeskHandler.compute_mode = compute_mode
     SignalDeskHandler.api_token = api_token
+    SignalDeskHandler.allowed_hosts = host_allowlist
     server = BoundedThreadingHTTPServer((host, port), SignalDeskHandler, max_workers=max_workers)
-    runtime_logger.event("server_started", host=host, port=port, network_bind=network_bind, authenticated=api_token is not None, max_workers=max_workers)
+    runtime_logger.event(
+        "server_started",
+        host=host,
+        port=port,
+        network_bind=network_bind,
+        authenticated=api_token is not None,
+        allowed_hosts=sorted(host_allowlist),
+        max_workers=max_workers,
+    )
     print(f"SithAssembly//Instawatch running on http://{host}:{port} ({'dev' if dev_mode else 'normal'} mode)")
     try:
         server.serve_forever()

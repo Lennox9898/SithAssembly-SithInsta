@@ -24,10 +24,11 @@ python app.py --check-config
 python app.py --print-capabilities
 ```
 
-The server refuses non-loopback binds unless `--allow-network` is explicit and `SITH_API_TOKEN` contains at least 24 characters. In that mode, every `/api/*` endpoint except `/api/health` requires `Authorization: Bearer <SITH_API_TOKEN>` and should still sit behind private VPN or authenticated TLS reverse proxy.
+The server refuses non-loopback binds unless `--allow-network` is explicit, `SITH_API_TOKEN` contains at least 24 characters, and a Host header allowlist is configured. In that mode, every `/api/*` endpoint except `/api/health` requires `Authorization: Bearer <SITH_API_TOKEN>` and should still sit behind a private VPN or authenticated TLS reverse proxy. A configured token applies on loopback as well; the browser asks for it once and keeps it only in that tab's session storage.
 
 ```powershell
 $env:SITH_API_TOKEN = "replace-with-a-random-value-of-at-least-24-characters"
+$env:SITH_ALLOWED_HOSTS = "instawatch.internal.example"
 python app.py --host 0.0.0.0 --allow-network
 ```
 
@@ -47,7 +48,7 @@ python SithAssembly.Runtime.py models
 python SithAssembly.Runtime.py llm --provider ollama-local --profile qwen3-8b --prompt "Fasse diesen lokalen Befund zusammen."
 ```
 
-The client accepts HTTP loopback server URLs only. If `SITH_API_TOKEN` is present, it sends it only to that loopback endpoint. Commands still pass through `SithAssembly//CommandDeck`; it does not execute arbitrary shell commands.
+The client accepts HTTP loopback API URLs only. If `SITH_API_TOKEN` is present, it sends it only to that loopback endpoint. Environment proxies and HTTP redirects are disabled for client requests. Commands still pass through `SithAssembly//CommandDeck`; it does not execute arbitrary shell commands.
 
 `doctor` is read-only and reports configuration validity plus optional CUDA, xFormers and FlashAttention availability. `models` only shows the editable registry. `llm` sends one visible request only to a provider that has been explicitly enabled in `config/local_model_registry.json`; its normalized readable response is printed directly in the terminal.
 
@@ -66,6 +67,8 @@ GET /api/diagnostics
 
 ## Module Registry
 
-`config/module_registry.json` is the startup registry. Each module declares a `key`, `import_path` and `enabled` flag. The runtime accepts only explicitly declared `src.*` import paths, imports them at startup, and reports `loaded`, `disabled`, `missing` or `error` through `/api/runtime`.
+`config/module_registry.json` is the startup registry. Each module declares a `key`, `import_path` and `enabled` flag. The runtime accepts only explicitly declared `src.SithAssembly.*` import paths, imports them at startup, and reports `loaded`, `disabled`, `missing` or `error` through `/api/runtime`.
 
 An optional module can expose a zero-argument `runtime_probe()` function. The runtime invokes that probe after the allowed import and records its JSON-compatible result. It never installs packages, downloads model weights, scans arbitrary files or executes external commands.
+
+OCR, relative-depth inference, and evidence-vault creation are opt-in and serialized per server process to prevent concurrent requests from exhausting local model or KDF resources.

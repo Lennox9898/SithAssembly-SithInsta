@@ -47,6 +47,25 @@ class EvidenceVaultTests(unittest.TestCase):
             container = json.loads(package[1].decode("utf-8"))
             self.assertEqual(container["header"]["magic"], "SITHASSEMBLY-EVIDENCE-VAULT")
             self.assertNotIn("correct horse", package[1].decode("utf-8"))
+
+            package_path = next((workspace / "vaults").glob("*.sifvault.json"))
+            container = json.loads(package_path.read_text(encoding="utf-8"))
+            from cryptography.hazmat.primitives import serialization
+            from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+            attacker_key = Ed25519PrivateKey.generate()
+            attacker_public = attacker_key.public_key().public_bytes(
+                encoding=serialization.Encoding.Raw,
+                format=serialization.PublicFormat.Raw,
+            )
+            container["header"]["signature"]["public_key"] = base64.b64encode(attacker_public).decode("ascii")
+            ciphertext = base64.b64decode(container["ciphertext"], validate=True)
+            forged_signature = attacker_key.sign(repository.evidence_vault._signing_payload(container["header"], ciphertext))
+            container["signature"] = base64.b64encode(forged_signature).decode("ascii")
+            package_path.write_text(json.dumps(container), encoding="utf-8")
+
+            forged = repository.verify_evidence_vault(created["id"])
+            self.assertEqual(forged["state"], "invalid")
         finally:
             shutil.rmtree(workspace, ignore_errors=True)
 

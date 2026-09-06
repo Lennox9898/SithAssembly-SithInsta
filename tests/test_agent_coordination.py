@@ -17,6 +17,10 @@ class AgentCoordinationTests(unittest.TestCase):
                 json.dumps(
                     {
                         "coordination_mode": "local_deterministic",
+                        "automation": {
+                            "run_mode": "operator_configurable",
+                            "api_token": "must-not-be-public",
+                        },
                         "agents": [
                             {
                                 "id": "worker-a",
@@ -26,6 +30,7 @@ class AgentCoordinationTests(unittest.TestCase):
                                 "subscribes_to": ["observation.received"],
                                 "publishes": ["observation.normalized"],
                                 "permissions": ["normalize_local_input"],
+                                "api_token": "must-not-be-public",
                             }
                         ],
                     }
@@ -37,6 +42,9 @@ class AgentCoordinationTests(unittest.TestCase):
 
         self.assertEqual(snapshot["active_agents"], 1)
         self.assertEqual(snapshot["routes"]["observation.received"], ["worker-a"])
+        self.assertNotIn("api_token", snapshot["agents"][0])
+        self.assertNotIn("api_token", snapshot["automation"])
+        self.assertNotIn("must-not-be-public", str(snapshot))
 
     def test_agent_report_journal_requires_registered_agent_and_keeps_connections(self) -> None:
         project_data = Path(__file__).resolve().parent.parent / "data"
@@ -81,3 +89,14 @@ class AgentCoordinationTests(unittest.TestCase):
             self.assertEqual(journal.tail()[0]["agent_id"], "worker-a")
             with self.assertRaises(ValueError):
                 journal.record(coordinator, {"agent_id": "unknown", "state": "info", "summary": "Nope"})
+
+            with self.assertRaisesRegex(ValueError, "at most 1024 characters"):
+                journal.record(
+                    coordinator,
+                    {
+                        "agent_id": "worker-a",
+                        "state": "completed",
+                        "summary": "Bounded output reference.",
+                        "output_refs": ["x" * 1025],
+                    },
+                )

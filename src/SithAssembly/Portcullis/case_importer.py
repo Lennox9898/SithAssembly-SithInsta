@@ -22,6 +22,8 @@ class CaseImporter:
     """Validates manually supplied or officially exported JSON before local persistence."""
 
     MAX_ITEMS = 250
+    MAX_HANDLE_CHARS = 128
+    MAX_BODY_CHARS = 100_000
 
     def preview(self, payload: Any) -> ImportPreview:
         items = payload.get("items") if isinstance(payload, dict) else payload
@@ -35,15 +37,24 @@ class CaseImporter:
             if not isinstance(item, dict):
                 rejected.append({"index": index, "reason": "item must be an object"})
                 continue
-            handle = str(item.get("handle", "")).strip()
-            body = str(item.get("body", "")).strip()
-            if not handle or not body:
-                rejected.append({"index": index, "reason": "handle and body are required"})
+            raw_handle = item.get("handle")
+            raw_body = item.get("body")
+            handle = raw_handle.strip() if isinstance(raw_handle, str) else ""
+            body = raw_body.strip() if isinstance(raw_body, str) else ""
+            if not handle or len(handle) > self.MAX_HANDLE_CHARS or not body or len(body) > self.MAX_BODY_CHARS:
+                rejected.append(
+                    {
+                        "index": index,
+                        "reason": "handle must contain 1 to 128 characters and body must contain 1 to 100000 characters",
+                    }
+                )
                 continue
             if not self._has_safe_urls(item):
                 rejected.append({"index": index, "reason": "URLs must use http or https without embedded credentials"})
                 continue
-            accepted.append(dict(item))
+            accepted_item = dict(item)
+            accepted_item["_import_index"] = index
+            accepted.append(accepted_item)
         return ImportPreview(accepted=accepted, rejected=rejected)
 
     @staticmethod
@@ -56,10 +67,21 @@ class CaseImporter:
 
     @staticmethod
     def _is_safe_optional_url(value: object) -> bool:
-        if value is None or not str(value).strip():
+        if value is None or value == "":
             return True
-        candidate = str(value).strip()
-        if len(candidate) > 2_048 or any(character.isspace() for character in candidate):
+        if not isinstance(value, str):
+            return False
+        candidate = value.strip()
+        if len(candidate) > 2_048 or any(
+            character.isspace() or ord(character) < 32 or ord(character) == 127
+            for character in candidate
+        ):
             return False
         parsed = urlparse(candidate)
-        return parsed.scheme in {"http", "https"} and bool(parsed.hostname) and not parsed.username and not parsed.password
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+            return False
+        try:
+            port = parsed.port
+        except ValueError:
+            return False
+        return port is None or 1 <= port <= 65535

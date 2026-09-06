@@ -65,6 +65,49 @@ class ImportAndPatternTests(unittest.TestCase):
             if db_path.exists():
                 db_path.unlink()
 
+    def test_import_rejects_non_string_fields_and_invalid_ports(self) -> None:
+        db_path = Path("data") / f"test_import_types_{uuid4().hex}.db"
+        try:
+            repo = Repository(db_path)
+            case = repo.create_case({"title": "Import type validation"})
+            result = repo.import_case_payload(
+                case["id"],
+                {
+                    "items": [
+                        {"handle": ["not", "text"], "body": "Captured text"},
+                        {"handle": "@invalid_port", "body": "Captured text", "source_url": "https://example.org:bad/post"},
+                    ]
+                },
+            )
+
+            self.assertEqual(result["accepted_count"], 0)
+            self.assertEqual(result["rejected_count"], 2)
+        finally:
+            if db_path.exists():
+                db_path.unlink()
+
+    def test_import_reports_late_schema_errors_without_losing_valid_items(self) -> None:
+        db_path = Path("data") / f"test_import_partial_{uuid4().hex}.db"
+        try:
+            repo = Repository(db_path)
+            case = repo.create_case({"title": "Import consistency"})
+            result = repo.import_case_payload(
+                case["id"],
+                {
+                    "items": [
+                        {"handle": "@valid", "body": "Valid imported evidence."},
+                        {"handle": "@invalid", "body": "Invalid optional field.", "platform": ["instagram"]},
+                    ]
+                },
+            )
+
+            self.assertEqual(result["accepted_count"], 1)
+            self.assertEqual(result["rejected_count"], 1)
+            self.assertEqual(len(repo.list_case_observations(case["id"])), 1)
+        finally:
+            if db_path.exists():
+                db_path.unlink()
+
 
 if __name__ == "__main__":
     unittest.main()

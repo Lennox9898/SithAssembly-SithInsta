@@ -6,6 +6,9 @@ from pathlib import Path
 from typing import Any
 
 
+MAX_DEPLOYMENT_CONFIG_BYTES = 256 * 1024
+
+
 class DeploymentPreflight:
     """Validates prepared deployment files without starting infrastructure."""
 
@@ -29,6 +32,8 @@ class DeploymentPreflight:
     def _config_check(self) -> dict[str, Any]:
         path = self.root_dir / "config" / "deployment.local.json"
         try:
+            if path.stat().st_size > MAX_DEPLOYMENT_CONFIG_BYTES:
+                raise ValueError("deployment configuration is limited to 256 KB")
             payload = json.loads(path.read_text(encoding="utf-8"))
             services = payload.get("services")
             secrets = payload.get("secret_references")
