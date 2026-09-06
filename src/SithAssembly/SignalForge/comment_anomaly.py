@@ -160,14 +160,14 @@ class CommentAnomalyEngine:
         mads = {name: median(fabs(item[name] - medians[name]) for item in rows) or 1.0 for name in names}
         ranked = sorted(names, key=lambda name: fabs(row[name] - medians[name]) / mads[name], reverse=True)
         labels = {
-            "characters": "ungewoehnliche Laenge",
-            "tokens": "ungewoehnliche Tokenzahl",
-            "uppercase_ratio": "abweichender Grossbuchstabenanteil",
-            "punctuation_ratio": "abweichende Zeichensetzung",
-            "urls": "abweichende Linkanzahl",
-            "mentions": "abweichende Erwaehnungsanzahl",
-            "hashtags": "abweichende Hashtag-Anzahl",
-            "actor_frequency": "abweichende Aktivitaetsdichte",
-            "duplicate_frequency": "wiederholter Wortlaut",
+            "characters": "unusual length",
+            "tokens": "unusual token count",
+            "uppercase_ratio": "unusual uppercase ratio",
+            "punctuation_ratio": "unusual punctuation ratio",
+            "urls": "unusual link count",
+            "mentions": "unusual mention count",
+            "hashtags": "unusual hashtag count",
+            "actor_frequency": "unusual activity density",
+            "duplicate_frequency": "repeated wording",
         }
         return [labels[name] for name in ranked[:3] if fabs(row[name] - medians[name]) / mads[name] >= 2]

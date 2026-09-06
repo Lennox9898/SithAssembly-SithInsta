@@ -1,6 +1,6 @@
 # Local Command Console
 
-The original `Command-Katalog_Network-Intelligence.pdf` is retained in this directory as the reference. `Signal Desk` implements only the local, allowlisted commands below against its SQLite case database.
+The printable English reference is `Network-Intelligence-Command-Reference.pdf`. `Signal Desk` implements only the local, allowlisted commands below against its SQLite case database.
 
 ## Available commands
 

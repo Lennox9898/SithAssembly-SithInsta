@@ -6,16 +6,16 @@ from typing import Any
 OPENERS = {
     "neutral": "The claim is not supported in this form.",
     "firm": "This is not factually defensible.",
-    "sharp": "Viel Pose, wenig Belege.",
+    "sharp": "Plenty of posture, very little evidence.",
 }
 
 FLAG_LABELS = {
-    "violent_threat": "Gewaltandrohung",
-    "dehumanization": "Entmenschlichung",
-    "recruitment": "Rekrutierung in geschlossene Raeume",
-    "historical_denial": "Geschichtsrevisionismus",
-    "authoritarian_glorification": "autoritaere Verherrlichung",
-    "conspiracy": "Verschwoerungsnarrative",
+    "violent_threat": "a threat of violence",
+    "dehumanization": "dehumanizing language",
+    "recruitment": "recruitment into closed groups",
+    "historical_denial": "historical denialism",
+    "authoritarian_glorification": "authoritarian glorification",
+    "conspiracy": "a conspiracy narrative",
 }
 
 
@@ -36,7 +36,7 @@ def compose_draft(observation: dict[str, Any], sources: list[dict[str, Any]], to
     if not sources:
         return {
             "tone": tone_key,
-            "body": "Entwurf blockiert: Erst belastbare Quellen anhaengen, dann Gegenrede formulieren.",
+            "body": "Draft blocked: attach reliable sources before composing a response.",
             "citations": [],
             "state": "blocked_missing_sources",
         }
@@ -63,7 +63,7 @@ def compose_draft(observation: dict[str, Any], sources: list[dict[str, Any]], to
         f"{opening} {signal_clause} "
         f"Before repeating myths, consult the sources: "
         f"{' '.join(evidence_lines)} "
-        f"Quellen: {citation_tail}".strip()
+        f"Sources: {citation_tail}".strip()
     )
 
     return {

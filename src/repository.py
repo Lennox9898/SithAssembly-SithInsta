@@ -573,7 +573,7 @@ class Repository:
                         "excerpt": "Historical denial narratives recycle falsehoods and erase documented evidence.",
                     },
                     {
-                        "title": "Bundeszentrale fuer politische Bildung",
+                        "title": "Federal Agency for Civic Education (bpb)",
                         "url": "https://www.bpb.de/",
                         "excerpt": "Extremist rhetoric often combines dehumanization with recruitment into closed circles.",
                     },

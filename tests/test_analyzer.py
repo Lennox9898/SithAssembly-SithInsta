@@ -16,7 +16,7 @@ class AnalyzerTests(unittest.TestCase):
     def test_returns_low_score_without_matches(self) -> None:
         result = score_text("This post needs more review, but it contains no obvious trigger pattern.")
         self.assertEqual(result.risk_level, 0)
-        self.assertEqual(result.severity, "niedrig")
+        self.assertEqual(result.severity, "low")
 
 
 if __name__ == "__main__":

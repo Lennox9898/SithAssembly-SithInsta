@@ -11,11 +11,13 @@ existing local workflow and must remain removable.
    Success: five existing decisions can be evaluated reproducibly; policy errors deny access.
 2. **Event envelope:** `schema_version`, `event_id`, `trace_id`, `occurred_at`,
    `actor`, `subject`, `payload_ref`, and `idempotency_key`. Anchors:
-   `src/agent_coordination.py` and `src/agent_controller.py`.
+   `src/SithAssembly/Conclave/agent_coordination.py` and
+   `src/SithAssembly/AssemblyCore/agent_controller.py`.
    Success: a local simulation detects a duplicate event and deterministically replays a stored sequence.
 3. **Provenance envelope:** Run ID, module/model profile, input fingerprint,
    source references, output fingerprint, and error state. Anchors:
-   `src/evidence_integrity.py`, `src/evidence_vault.py`, `src/runtime_logging.py`.
+   `src/SithAssembly/CipherLedger/evidence_integrity.py`,
+   `src/SithAssembly/EvidenceVault/evidence_vault.py`, and `src/runtime_logging.py`.
    Success: an artifact can be traced locally to its integrity and origin without putting plaintext evidence in telemetry.
 
 ## Phase 1: Individual, Replaceable PoCs

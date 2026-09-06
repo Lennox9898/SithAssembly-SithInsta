@@ -1,0 +1,2 @@
+# Reproducible reference-PDF builder only; not required by the local server.
+reportlab>=4.2,<5

@@ -1,84 +1,133 @@
-# SithAssembly//SithInsta 
+<p align="center">
+  <img src="docs/assets/sithinsta-header.svg" alt="SithAssembly SithInsta - evidence in, connections out" width="100%">
+</p>
 
-You can check out the [Wiki](https://github.com/Lennox9898/SithAssembly-SithInsta/wiki) for setup, architecture, modules, local analysis models, and deployment notes.
+<p align="center">
+  <a href="https://github.com/Lennox9898/SithAssembly-SithInsta/wiki"><img alt="Wiki" src="https://img.shields.io/badge/WIKI-OPERATOR_MANUAL-E64141?style=flat-square&labelColor=111111"></a>
+  <img alt="Status: active alpha" src="https://img.shields.io/badge/STATUS-ACTIVE_ALPHA-D8D2C4?style=flat-square&labelColor=111111">
+  <img alt="Local first" src="https://img.shields.io/badge/RUNTIME-LOCAL_FIRST-D8D2C4?style=flat-square&labelColor=111111">
+  <img alt="Python 3.11 or newer" src="https://img.shields.io/badge/PYTHON-3.11%2B-D8D2C4?style=flat-square&labelColor=111111">
+  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/LICENSE-MIT-D8D2C4?style=flat-square&labelColor=111111"></a>
+</p>
 
-It is the Instagram Guardian for protecting vulnerable groups and keeping an eye on suspects.
+<p align="center">
+  <strong>A local-first intelligence workbench for traceable social-media evidence.</strong><br>
+  Map accounts, activity, relationships, timelines, and model-assisted review without turning probabilistic output into fact.
+</p>
 
-it is Running on SithAssembly Framework , Allowing easy to use changeable Modules in dynamic use Cases,
-SithAssembly will can be used with multiple languages and Finally Fine-Tuned in Assembly code ,
+<p align="center">
+  <a href="https://github.com/Lennox9898/SithAssembly-SithInsta/wiki"><strong>Explore the Wiki</strong></a>
+  &nbsp;//&nbsp;
+  <a href="#quick-start"><strong>Run locally</strong></a>
+  &nbsp;//&nbsp;
+  <a href="SECURITY.md"><strong>Security boundary</strong></a>
+</p>
 
-SithAssembly will be the effort to Connect AI with ASM and even Bytecode. 
+---
 
- # The current repository only holds Python 
- # and for future Updates also Rust.
+## Evidence in. Connections out.
 
-- `src/report_generator.py`: JSON and local PDF reports.
-- `src/agent_controller.py`: visible processing stages.
-- `src/job_queue.py`: persistent, registry-routed local job ledger with idempotency and event envelopes.
-- `src/job_worker.py`: explicit local worker for registered OCR and depth jobs.
-- `src/command_engine.py`: allowlisted slash commands for local cases.
-- `src/case_importer.py`: validation for manual and officially exported JSON data.
-- `src/evidence_integrity.py`: local content and context fingerprints.
-- `src/pattern_engine.py`: evidence-bound candidates for accounts, hashtags, domains, and repeated text.
-- `src/analyzer.py`: risk signals and basic classification.
-- `src/drafter.py`: concise, source-bound response drafts.
-- `src/server.py`: HTTP API and static file delivery.
-- `src/module_runtime.py`: explicit JSON registry and controlled module startup hooks.
-- `src/runtime_logging.py`: local JSONL runtime logs with sensitive-field redaction.
-- `config/module_registry.json`: the allowed `src.SithAssembly.*` modules loaded at startup.
-- `web/`: local casework interface.
+**SithAssembly//SithInsta** turns analyst-supplied or validated exported public-content records into structured casework. It connects observations, profile changes, shared links, mentions, hashtags, repeated language, timelines, and graph relationships while preserving the source record behind each candidate.
 
-## Import and Patterns
+The system is built for investigation support, not automated verdicts. Identity hypotheses, anomaly scores, graph centrality, OCR text, and model responses remain reviewable claims with confidence, provenance, and evidence links.
 
-The import surface accepts a JSON list with required `handle` and `body` fields and optional metadata including `platform`, `source_url`, `captured_at`, and `sources`. Every entry is validated and fingerprinted locally before storage.
+> **Current state:** active local alpha. The browser interface, case database, command console, review workflow, model adapters, exports, and evidence vault are implemented. Platform collection, automated account activity, external posting, and public multi-user hosting are not enabled.
 
-The Pattern Engine only presents candidates based on case evidence: recurring accounts, shared hashtags or domains, identical normalized text, and central nodes. Every finding links to the underlying observation. A general-purpose server will be integrated later.
+## What ships today
 
-## Optional Analysis Models
+| Capability | Current implementation |
+| --- | --- |
+| **Case intelligence** | Cases, observations, sources, notes, tags, screenshots, profile snapshots, identity hypotheses, and review states. |
+| **Network reconstruction** | Evidence-bound relationships, common-neighbor and path analysis, communities, centrality, and source-linked graph data. |
+| **Temporal analysis** | Chronological views, account activity comparison, profile-change history, and processing timelines. |
+| **Local model adapters** | Optional comment anomaly scoring, PP-OCRv6 OCR, Depth Anything V2 derivatives, and loopback-only local LLM providers. |
+| **Visible orchestration** | Registry-loaded modules, Conclave job state, immutable job events, processing stages, diagnostics, and redacted runtime logs. |
+| **Evidence output** | Complete JSON/PDF case exports plus opt-in encrypted and signed EvidenceVault packages. |
 
-`SithAssembly//SignalForge` uses PyOD ECOD for local comment-outlier candidates when the optional dependency is installed. `SithAssembly//GlyphWatch` uses PaddleOCR 3 / PP-OCRv6 for explicitly uploaded local image evidence. Both are opt-in: there is no automatic package installation, silent model download, or external content retrieval. See `docs/MODEL_INTEGRATIONS.md` for selection, setup, and limits.
+## System map
 
-The planned Qwen output separates visible evidence-bound facts from a readable model assessment with confidence and uncertainty. The contract is in `docs/QWEN_OUTPUT.md` and `config/qwen_response_contract.json`.
+```mermaid
+flowchart LR
+    IN[Manual input or validated export] --> GATE[Portcullis + VektorZero]
+    GATE --> CASE[(CaseForge / SQLite)]
 
-Local agent models can be connected through Ollama, llama.cpp, or vLLM. The editable provider registry, local LLM API contract, and startup sequence are in `docs/LOCAL_MODELS.md`.
+    CASE --> ENTITY[MirrorFace + NullMask]
+    CASE --> REL[SpectreNet + ChronoWatch]
+    REL --> GRAPH[GhostCluster]
 
-`python app.py --check-config` validates all local registries without starting a server. `python app.py --print-capabilities` and `python SithAssembly.Runtime.py doctor` report whether CUDA and optional accelerators such as xFormers or FlashAttention are present. These diagnostics install and enable nothing automatically.
+    CASE --> MODEL[SignalForge + GlyphWatch]
+    JOBS[Conclave job ledger] -. registered jobs .-> MODEL
+    REVIEW[Human review] <--> CASE
 
-The Conclave job ledger exposes persistent local job state and event trails for approved registry topics. It does not execute work on its own; see `docs/JOB_QUEUE.md` for the lifecycle and local API.
-
-## Server Preparation
-
-`deploy/` contains an inactive Compose topology for PostgreSQL, S3-compatible evidence storage, NATS JetStream, and separate API and worker roles. `python SithAssembly.Deploy.py preflight` checks preparation without starting Docker. The activation sequence is in `docs/DEPLOYMENT_PREP.md`.
-
-The external agent-stack dossier is stored unchanged at `docs/Agentenstack_Evaluationsdossier_2026-09-04.pdf`. Its derived current-state review, scorecard, and bounded PoC sequence are in `docs/architecture/`; they do not automatically add third-party components.
-
-## EvidenceVault
-
-`SithAssembly//EvidenceVault` creates an opt-in `.sifvault.json` package for an existing case with a ZIP payload, SHA-256 manifest, AES-256-GCM encryption, scrypt key derivation, and Ed25519 signature. The passphrase is used only during package creation and is not persisted. Verification is anchored to the installation key in `data/vault_keys/`, which must be backed up separately and protected. The UI export is opt-in; alternatively run `python SIF_EvidenceVault.py create --case-id <id>`. See `docs/MODULE_RUNTIME.md`, `SECURITY.md`, and `docs/IMPORTANT_DISCLAIMER.md`.
-
-## Command Console
-
-The interface console executes a local, restricted subset of the stored command catalog. Examples:
-
-```text
-/find posts --query "term" --limit 20
-/profile connections @account
-/graph path @account_a @account_b --max-hops 4
-/timeline build
-/report generate --format pdf
+    CASE --> REPORT[BlackArchive]
+    CASE --> VAULT[CipherLedger + EvidenceVault]
 ```
 
-The complete locally available list is in `docs/COMMANDS.md`. `docs/Command-Katalog_Network-Intelligence.pdf` remains an unchanged reference. Platform capture, crawling, watches, alerts, sharing, external communication, and identity consolidation are not enabled.
+Modules do not discover arbitrary code. Startup loads only the explicit `src.SithAssembly.*` entries in [`config/module_registry.json`](config/module_registry.json), and each external bridge remains separately configured and bounded.
 
-## Using the Interface
+## The Assembly
 
-1. Start with `python app.py` and open `http://127.0.0.1:8080`.
-2. Create a case or use the local inbox.
-3. Record an observation with its source URL and timestamp.
-4. Use the timeline, graph, and profile view. Graph edges link to their source URL and display time.
-5. Add notes, screenshot references, and clearly marked unconfirmed hypotheses only with evidence.
-6. Export the case from the header as JSON or PDF.
+| Layer | Modules |
+| --- | --- |
+| Intake and casework | `VektorZero`, `Portcullis`, `CaseForge` |
+| Profiles and identity | `MirrorFace`, `NullMask` |
+| Relationships and time | `SpectreNet`, `ChronoWatch`, `GhostCluster` |
+| Local analysis | `SignalForge`, `GlyphWatch`, `MindForge` |
+| Coordination | `AssemblyCore`, `Conclave`, `CommandDeck`, `ClawBridge` |
+| Integrity and reporting | `CipherLedger`, `BlackArchive`, `EvidenceVault` |
+| Runtime and deployment | `ForgeProbe`, `Citadel` |
+
+The complete role map lives in the [Module Overview](https://github.com/Lennox9898/SithAssembly-SithInsta/wiki/Module-Overview).
+
+## Quick start
+
+Requirements: Windows and Python 3.11 or newer. The base local runtime uses the Python standard library; AI backends are optional and installed separately.
+
+```powershell
+git clone https://github.com/Lennox9898/SithAssembly-SithInsta.git
+cd SithAssembly-SithInsta
+.\RUN.bat
+```
+
+Open `http://127.0.0.1:8080`.
+
+Validate configuration or run the test suite without starting the server:
+
+```powershell
+python app.py --check-config
+python -m unittest discover -s tests
+```
+
+Use `.\DEV.bat` for detailed local diagnostics. Optional OCR, depth, anomaly, local-LLM, container, and network setup is documented in the Wiki and is never activated silently.
+
+## Documentation
+
+The README is the front door. Operational detail and evolving design guidance belong in the **[Wiki](https://github.com/Lennox9898/SithAssembly-SithInsta/wiki)**:
+
+| Start here | Deep dive |
+| --- | --- |
+| [Local Setup](https://github.com/Lennox9898/SithAssembly-SithInsta/wiki/Local-Setup) | [Analysis Models](https://github.com/Lennox9898/SithAssembly-SithInsta/wiki/Analysis-Models) |
+| [Casework and Evidence](https://github.com/Lennox9898/SithAssembly-SithInsta/wiki/Casework-and-Evidence) | [Conclave Job Ledger](https://github.com/Lennox9898/SithAssembly-SithInsta/wiki/Conclave-Job-Ledger) |
+| [Module Overview](https://github.com/Lennox9898/SithAssembly-SithInsta/wiki/Module-Overview) | [Deployment](https://github.com/Lennox9898/SithAssembly-SithInsta/wiki/Deployment) |
+| [Command Console](https://github.com/Lennox9898/SithAssembly-SithInsta/wiki/Command-Console) | [Security and Trust](https://github.com/Lennox9898/SithAssembly-SithInsta/wiki/Security-and-Trust) |
+
+Versioned contracts and reference artifacts remain in the repository:
+
+- [`SECURITY.md`](SECURITY.md) defines the supported security boundary.
+- [`AGENT_COORDINATION.md`](AGENT_COORDINATION.md) defines human-editable agent coordination rules.
+- [`docs/COMMANDS.md`](docs/COMMANDS.md) is the source of truth for enabled local commands.
+- [`docs/Network-Intelligence-Command-Reference.pdf`](docs/Network-Intelligence-Command-Reference.pdf) is the printable English command reference.
+- [`docs/External-Stack-Evaluation-Dossier-2026-09-04.pdf`](docs/External-Stack-Evaluation-Dossier-2026-09-04.pdf) captures the English architecture evaluation snapshot.
+
+## Trust boundary
+
+- Every candidate should remain traceable to source material, capture time, processing method, and confidence.
+- A model result is review material, never proof of identity, intent, ideology, coordination, or criminal conduct.
+- The supported default is loopback-only. Network deployment requires an explicit token, Host allowlist, authenticated TLS or a private VPN, and additional production controls.
+- Credentials, case evidence, databases, logs, model caches, private keys, and vault material do not belong in Git.
+
+Read the full [security policy](SECURITY.md) before enabling any network-facing configuration.
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+Released under the [MIT License](LICENSE).

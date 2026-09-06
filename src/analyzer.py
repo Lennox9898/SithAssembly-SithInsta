@@ -51,10 +51,10 @@ SIGNAL_WEIGHTS = {
 }
 
 SEVERITY_LABELS = (
-    (0, "niedrig"),
-    (20, "moderat"),
-    (45, "hoch"),
-    (70, "kritisch"),
+    (0, "low"),
+    (20, "moderate"),
+    (45, "high"),
+    (70, "critical"),
 )
 
 
@@ -67,7 +67,7 @@ class AnalysisResult:
 
 
 def _label_for_score(score: int) -> str:
-    current = "niedrig"
+    current = "low"
     for threshold, label in SEVERITY_LABELS:
         if score >= threshold:
             current = label
@@ -87,8 +87,8 @@ def score_text(text: str) -> AnalysisResult:
         summary = "No direct heuristic matches. Human review remains required."
     else:
         summary = (
-            f"Erkannte Signale: {', '.join(matches)}. "
-            f"Vorlaeufige Einstufung: {severity} ({risk_level}/100)."
+            f"Detected signals: {', '.join(matches)}. "
+            f"Preliminary classification: {severity} ({risk_level}/100)."
         )
 
     return AnalysisResult(
