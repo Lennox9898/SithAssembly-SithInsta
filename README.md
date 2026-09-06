@@ -7,7 +7,7 @@
   <img alt="Status: active alpha" src="https://img.shields.io/badge/STATUS-ACTIVE_ALPHA-D8D2C4?style=flat-square&labelColor=111111">
   <img alt="Local first" src="https://img.shields.io/badge/RUNTIME-LOCAL_FIRST-D8D2C4?style=flat-square&labelColor=111111">
   <img alt="Python 3.11 or newer" src="https://img.shields.io/badge/PYTHON-3.11%2B-D8D2C4?style=flat-square&labelColor=111111">
-  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/LICENSE-MIT-D8D2C4?style=flat-square&labelColor=111111"></a>
+  <a href="LICENSE"><img alt="GNU AGPL v3.0" src="https://img.shields.io/badge/LICENSE-AGPL--3.0-D8D2C4?style=flat-square&labelColor=111111"></a>
 </p>
 
 <p align="center">
@@ -130,4 +130,13 @@ Read the full [security policy](SECURITY.md) before enabling any network-facing 
 
 ## License
 
-Released under the [MIT License](LICENSE).
+SithAssembly//SithInsta is free and open-source software licensed under the
+[GNU Affero General Public License v3.0 only](LICENSE). Individuals, NGOs,
+companies, and government entities may use it without a license fee or prior
+permission. Modified versions may also be used, but distributing them or
+offering them to users over a network requires the corresponding source code to
+remain available under AGPL-3.0.
+
+AGPL permits charging for copies or services; its protection is strong
+copyleft, not a ban on commercial activity. Versions previously published
+under MIT retain their original license.
