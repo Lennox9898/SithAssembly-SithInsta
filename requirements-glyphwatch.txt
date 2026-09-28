@@ -1,5 +1,5 @@
 # GlyphWatch OCR and depth runtime. Install CUDA-enabled PyTorch separately
 # from its official wheel index before installing these application packages.
 paddleocr==3.7.0
-transformers==5.16.1
+transformers==5.17.0
 Pillow>=12.3,<13
